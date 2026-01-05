@@ -3,7 +3,7 @@ import {
   MapPin, Bus, Clock, Star, Search, Moon, Sun, Navigation, AlertTriangle,
   RefreshCw, ChevronRight, X, Heart, Map as MapIcon, Bell, BellOff, Share2,
   History, Settings, Locate, ChevronDown, Filter, Zap, Info,
-  ExternalLink, Wifi, WifiOff, Download, Check, CloudOff, List
+  ExternalLink, Wifi, WifiOff, Download, Check, CloudOff, List, Home, Briefcase
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -250,6 +250,10 @@ export default function App() {
   // Estado de vista (lista o mapa)
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
 
+  // Paradas especiales: Casa y Trabajo
+  const [casaParadaId, setCasaParadaId] = useState(() => JSON.parse(localStorage.getItem('surbus_casa') || 'null'));
+  const [trabajoParadaId, setTrabajoParadaId] = useState(() => JSON.parse(localStorage.getItem('surbus_trabajo') || 'null'));
+
   // Tema
   const t = darkMode ? {
     bg: '#0a0a0f', bgCard: '#12121a', bgHover: '#1a1a25',
@@ -266,6 +270,8 @@ export default function App() {
   // Persistir
   useEffect(() => { localStorage.setItem('surbus_dark', JSON.stringify(darkMode)); }, [darkMode]);
   useEffect(() => { localStorage.setItem('surbus_fav', JSON.stringify(favoritos)); }, [favoritos]);
+  useEffect(() => { localStorage.setItem('surbus_casa', JSON.stringify(casaParadaId)); }, [casaParadaId]);
+  useEffect(() => { localStorage.setItem('surbus_trabajo', JSON.stringify(trabajoParadaId)); }, [trabajoParadaId]);
 
   // Geolocalización
   const getUserLocation = useCallback(() => {
@@ -352,12 +358,12 @@ export default function App() {
   // COMPONENTES
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const ParadaCard = ({ parada }) => (
+  const ParadaCard = ({ parada, showHomeWorkButtons = false }) => (
     <div onClick={() => setSelectedParada(parada)} style={{
       background: t.bgCard, borderRadius: 16, padding: '16px 20px', cursor: 'pointer',
       border: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14
     }}>
-      <div style={{ width: 48, height: 48, borderRadius: 12, background: t.gradient, 
+      <div style={{ width: 48, height: 48, borderRadius: 12, background: t.gradient,
         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>{parada.id}</span>
       </div>
@@ -378,11 +384,55 @@ export default function App() {
           </div>
         )}
       </div>
-      <button onClick={(e) => { e.stopPropagation(); toggleFavorito(parada.id); }} 
-        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8 }}>
-        <Heart size={22} fill={favoritos.includes(parada.id) ? '#ef4444' : 'transparent'} 
-          color={favoritos.includes(parada.id) ? '#ef4444' : t.textMuted} />
-      </button>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        {showHomeWorkButtons && (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setCasaParadaId(casaParadaId === parada.id ? null : parada.id);
+              }}
+              style={{
+                background: casaParadaId === parada.id ? t.accent : 'transparent',
+                border: `1px solid ${casaParadaId === parada.id ? t.accent : t.border}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                padding: 6,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              title="Marcar como Casa"
+            >
+              <Home size={18} color={casaParadaId === parada.id ? '#fff' : t.textMuted} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setTrabajoParadaId(trabajoParadaId === parada.id ? null : parada.id);
+              }}
+              style={{
+                background: trabajoParadaId === parada.id ? t.accent : 'transparent',
+                border: `1px solid ${trabajoParadaId === parada.id ? t.accent : t.border}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                padding: 6,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              title="Marcar como Trabajo"
+            >
+              <Briefcase size={18} color={trabajoParadaId === parada.id ? '#fff' : t.textMuted} />
+            </button>
+          </>
+        )}
+        <button onClick={(e) => { e.stopPropagation(); toggleFavorito(parada.id); }}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8 }}>
+          <Heart size={22} fill={favoritos.includes(parada.id) ? '#ef4444' : 'transparent'}
+            color={favoritos.includes(parada.id) ? '#ef4444' : t.textMuted} />
+        </button>
+      </div>
     </div>
   );
 
@@ -684,6 +734,123 @@ export default function App() {
     );
   };
 
+  // Widget de Trayecto Casa-Trabajo
+  const CommuteWidget = () => {
+    const [currentTime, setCurrentTime] = useState(new Date());
+
+    // Actualizar la hora cada minuto
+    useEffect(() => {
+      const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+      return () => clearInterval(timer);
+    }, []);
+
+    // Determinar si es hora de ir al trabajo (6:00 - 11:00)
+    const hour = currentTime.getHours();
+    const isGoingToWork = hour >= 6 && hour < 11;
+
+    // Obtener la parada relevante
+    const paradaId = isGoingToWork ? casaParadaId : trabajoParadaId;
+    const parada = paradaId ? PARADAS.find(p => p.id === paradaId) : null;
+
+    // No mostrar el widget si no hay parada configurada
+    if (!parada) return null;
+
+    // Obtener las líneas de la parada y sus tiempos
+    const lineasParada = parada.lineas.slice(0, 3); // Primeras 3 líneas
+    const tiemposParada = lineasParada.map(lineaId => ({
+      lineaId,
+      linea: getLinea(lineaId),
+      tiempo: tiempos[`${lineaId}-${paradaId}`]
+    }));
+
+    return (
+      <div style={{
+        background: t.gradient,
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 16,
+        color: '#fff'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          {isGoingToWork ? (
+            <Briefcase size={28} />
+          ) : (
+            <Home size={28} />
+          )}
+          <div style={{ flex: 1 }}>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
+              {isGoingToWork ? '⏰ Hora de ir al curro' : '🏠 Hora de volver a casa'}
+            </h3>
+            <p style={{ margin: '4px 0 0', fontSize: 13, opacity: 0.9 }}>
+              {parada.nombre}
+            </p>
+          </div>
+          <Clock size={20} style={{ opacity: 0.8 }} />
+        </div>
+
+        {/* Tiempos de las líneas */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {tiemposParada.map(({ lineaId, linea, tiempo }) => (
+            <div
+              key={lineaId}
+              style={{
+                background: 'rgba(255,255,255,0.15)',
+                borderRadius: 10,
+                padding: '10px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{
+                  background: linea.color,
+                  color: '#fff',
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 700
+                }}>
+                  L{lineaId}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>
+                  {linea.nombre}
+                </span>
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>
+                {tiempo ? tiempo : '—'}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={() => loadTiempos(parada)}
+          disabled={loading || !isOnline}
+          style={{
+            marginTop: 12,
+            width: '100%',
+            background: 'rgba(255,255,255,0.2)',
+            border: 'none',
+            borderRadius: 10,
+            padding: '10px 14px',
+            color: '#fff',
+            fontWeight: 600,
+            fontSize: 14,
+            cursor: loading || !isOnline ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8
+          }}
+        >
+          <RefreshCw size={16} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+          {loading ? 'Actualizando...' : 'Actualizar tiempos'}
+        </button>
+      </div>
+    );
+  };
+
   // Vista del Planificador de Rutas
   const RoutePlannerView = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -884,6 +1051,9 @@ export default function App() {
 
       {/* Main */}
       <main style={{ maxWidth: 600, margin: '0 auto', padding: '16px 20px' }}>
+        {/* Widget Casa-Trabajo */}
+        <CommuteWidget />
+
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', paddingBottom: 4 }}>
           {[
@@ -969,7 +1139,7 @@ export default function App() {
                 <p style={{ marginTop: 16 }}>No tienes favoritos</p>
               </div>
             ) : viewMode === 'list' ? (
-              PARADAS.filter(p => favoritos.includes(p.id)).map(p => <ParadaCard key={p.id} parada={p} />)
+              PARADAS.filter(p => favoritos.includes(p.id)).map(p => <ParadaCard key={p.id} parada={p} showHomeWorkButtons={true} />)
             ) : (
               <GeneralMapView paradas={PARADAS.filter(p => favoritos.includes(p.id))} />
             )}
