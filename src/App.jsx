@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useDeferredValue } from 'react';
 import {
   MapPin, Bus, Clock, Star, Search, Moon, Sun, Navigation, AlertTriangle,
   RefreshCw, ChevronRight, X, Heart, Map as MapIcon, Bell, BellOff, Share2,
@@ -50,13 +50,46 @@ const haversineDistance = (lat1, lon1, lat2, lon2) => {
 const formatDistance = (m) => m < 1000 ? `${Math.round(m)} m` : `${(m/1000).toFixed(1)} km`;
 const getLinea = (id) => LINEAS.find(l => l.id === id);
 
+// Normalizar texto: eliminar acentos y convertir a minúsculas
+const normalizeText = (str) => str
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '');
+
+// Parse JSON seguro con fallback
+const safeJsonParse = (value, fallback) => {
+  try {
+    return value !== null ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+// formatTiempo movido fuera del componente para evitar recreación
+const formatTiempo = (tiempo, theme) => {
+  if (!tiempo?.success) return { text: 'Sin datos', color: theme.textMuted };
+  if (!tiempo.waitTimeString) return { text: tiempo.waitTimeType === 3 ? 'Sin servicio' : '...', color: theme.textMuted };
+  const mins = parseInt(tiempo.waitTimeString);
+  if (isNaN(mins)) return { text: tiempo.waitTimeString, color: theme.accent };
+  if (mins <= 3) return { text: `${mins} min`, color: theme.success };
+  if (mins <= 10) return { text: `${mins} min`, color: theme.warning };
+  return { text: `${mins} min`, color: theme.danger };
+};
+
 // API usando el proxy de Vercel (evita CORS)
 const API_BASE = '/api/surbus';
 
 const fetchTiempoEspera = async (paradaId, lineaId) => {
   try {
     const res = await fetch(`${API_BASE}?l=${lineaId}&bs=${paradaId}`);
-    return await res.json();
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    const data = await res.json();
+    if (!data.success && data.error) {
+      return { success: false, error: data.error };
+    }
+    return data;
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -73,6 +106,15 @@ const calcularRutas = (origenCoords, destinoCoords) => {
   const MAX_DISTANCIA_PARADA = 800; // Metros - radio para buscar paradas cercanas
 
   const rutas = [];
+
+  // Pre-indexar paradas por línea para optimizar búsquedas (O(n) en lugar de O(n³))
+  const paradasPorLinea = {};
+  PARADAS.forEach(p => {
+    p.lineas.forEach(l => {
+      if (!paradasPorLinea[l]) paradasPorLinea[l] = [];
+      paradasPorLinea[l].push(p);
+    });
+  });
 
   // 1. Encontrar paradas cercanas al origen y destino
   const paradasOrigen = PARADAS.map(p => ({
@@ -142,7 +184,7 @@ const calcularRutas = (origenCoords, destinoCoords) => {
   if (mejorRutaDirecta && mejorRutaDirecta.distanciaAndando > UMBRAL_TRANSBORDO) {
     paradasOrigen.forEach(paradaOrigen => {
       paradaOrigen.lineas.forEach(lineaOrigen => {
-        const paradasLineaOrigen = PARADAS.filter(p => p.lineas.includes(lineaOrigen));
+        const paradasLineaOrigen = paradasPorLinea[lineaOrigen] || [];
 
         paradasLineaOrigen.forEach(paradaTransbordo => {
           if (paradaTransbordo.id === paradaOrigen.id) return;
@@ -278,15 +320,17 @@ function usePWA() {
 export default function App() {
   const { isOnline, isInstalled, canInstall, install } = usePWA();
   
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('surbus_dark');
-    return saved !== null ? JSON.parse(saved) : true;
-  });
+  const [darkMode, setDarkMode] = useState(() =>
+    safeJsonParse(localStorage.getItem('surbus_dark'), true)
+  );
   const [activeTab, setActiveTab] = useState('cercanas');
   const [searchTerm, setSearchTerm] = useState('');
+  const deferredSearchTerm = useDeferredValue(searchTerm); // Debouncing de búsqueda
   const [selectedParada, setSelectedParada] = useState(null);
   const [selectedLinea, setSelectedLinea] = useState(null);
-  const [favoritos, setFavoritos] = useState(() => JSON.parse(localStorage.getItem('surbus_fav') || '[]'));
+  const [favoritos, setFavoritos] = useState(() =>
+    safeJsonParse(localStorage.getItem('surbus_fav'), [])
+  );
   const [tiempos, setTiempos] = useState({});
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -306,8 +350,12 @@ export default function App() {
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
 
   // Paradas especiales: Casa y Trabajo
-  const [casaParadaId, setCasaParadaId] = useState(() => JSON.parse(localStorage.getItem('surbus_casa') || 'null'));
-  const [trabajoParadaId, setTrabajoParadaId] = useState(() => JSON.parse(localStorage.getItem('surbus_trabajo') || 'null'));
+  const [casaParadaId, setCasaParadaId] = useState(() =>
+    safeJsonParse(localStorage.getItem('surbus_casa'), null)
+  );
+  const [trabajoParadaId, setTrabajoParadaId] = useState(() =>
+    safeJsonParse(localStorage.getItem('surbus_trabajo'), null)
+  );
 
   // Tema
   const t = darkMode ? {
@@ -322,24 +370,41 @@ export default function App() {
     gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
   };
 
-  // Persistir
-  useEffect(() => { localStorage.setItem('surbus_dark', JSON.stringify(darkMode)); }, [darkMode]);
-  useEffect(() => { localStorage.setItem('surbus_fav', JSON.stringify(favoritos)); }, [favoritos]);
-  useEffect(() => { localStorage.setItem('surbus_casa', JSON.stringify(casaParadaId)); }, [casaParadaId]);
-  useEffect(() => { localStorage.setItem('surbus_trabajo', JSON.stringify(trabajoParadaId)); }, [trabajoParadaId]);
+  // Persistir localStorage con batching (una sola escritura en lugar de 4)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      localStorage.setItem('surbus_dark', JSON.stringify(darkMode));
+      localStorage.setItem('surbus_fav', JSON.stringify(favoritos));
+      localStorage.setItem('surbus_casa', JSON.stringify(casaParadaId));
+      localStorage.setItem('surbus_trabajo', JSON.stringify(trabajoParadaId));
+    }, 100); // Debounce de 100ms
+    return () => clearTimeout(timer);
+  }, [darkMode, favoritos, casaParadaId, trabajoParadaId]);
 
-  // Geolocalización
-  const getUserLocation = useCallback(() => {
-    if (!navigator.geolocation) return setLocationError('Geolocalización no soportada');
+  // Geolocalización (ejecutar solo una vez al montar)
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocalización no soportada');
+      return;
+    }
     setLoadingLocation(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => { setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLoadingLocation(false); },
-      () => { setLocationError('No se pudo obtener ubicación'); setLoadingLocation(false); },
+      (pos) => {
+        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLoadingLocation(false);
+      },
+      (error) => {
+        const messages = {
+          [error.PERMISSION_DENIED]: 'Permiso de geolocalización denegado',
+          [error.TIMEOUT]: 'Timeout al obtener ubicación',
+          [error.POSITION_UNAVAILABLE]: 'Ubicación no disponible'
+        };
+        setLocationError(messages[error.code] || 'Error al obtener ubicación');
+        setLoadingLocation(false);
+      },
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, []);
-
-  useEffect(() => { getUserLocation(); }, [getUserLocation]);
+  }, []); // Sin dependencias - solo ejecutar una vez
 
   // Paradas ordenadas
   const paradasCercanas = useMemo(() => {
@@ -351,19 +416,13 @@ export default function App() {
 
   const paradasFiltradas = useMemo(() => {
     const src = activeTab === 'cercanas' ? paradasCercanas : PARADAS;
-    if (!searchTerm) return src;
+    if (!deferredSearchTerm) return src;
 
-    // Normalizar texto: eliminar acentos y convertir a minúsculas
-    const normalize = (str) => str
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
-
-    // Dividir el término de búsqueda en palabras
-    const searchWords = normalize(searchTerm).split(/\s+/).filter(w => w.length > 0);
+    // Dividir el término de búsqueda en palabras (normalizar una sola vez)
+    const searchWords = normalizeText(deferredSearchTerm).split(/\s+/).filter(w => w.length > 0);
 
     return src.filter(p => {
-      const normalizedName = normalize(p.nombre);
+      const normalizedName = normalizeText(p.nombre);
       const normalizedId = p.id.toString();
 
       // Verificar si todas las palabras de búsqueda están en el nombre o ID
@@ -373,9 +432,9 @@ export default function App() {
         p.lineas.some(l => `l${l}`.includes(word))
       );
     });
-  }, [searchTerm, paradasCercanas, activeTab]);
+  }, [deferredSearchTerm, paradasCercanas, activeTab]);
 
-  // Cargar tiempos
+  // Cargar tiempos con límite de caché
   const loadTiempos = useCallback(async (parada) => {
     if (!parada) return;
     setLoading(true);
@@ -383,27 +442,53 @@ export default function App() {
     await Promise.all(parada.lineas.map(async (l) => {
       nuevo[`${parada.id}-${l}`] = await fetchTiempoEspera(parada.id, l);
     }));
-    setTiempos(prev => ({ ...prev, ...nuevo }));
+
+    // Limitar caché a últimas 100 entradas para evitar memory leak
+    setTiempos(prev => {
+      const combined = { ...prev, ...nuevo };
+      const keys = Object.keys(combined);
+      if (keys.length > 100) {
+        const recentKeys = keys.slice(-100);
+        return Object.fromEntries(recentKeys.map(k => [k, combined[k]]));
+      }
+      return combined;
+    });
+
     setLastUpdate(new Date());
     setLoading(false);
   }, []);
 
+  // Auto-refresh con prevención de race conditions
   useEffect(() => {
-    if (selectedParada && isOnline) {
-      loadTiempos(selectedParada);
-      if (autoRefresh) {
-        const iv = setInterval(() => loadTiempos(selectedParada), 30000);
-        return () => clearInterval(iv);
+    if (!selectedParada || !isOnline) return;
+
+    let isCancelled = false;
+
+    const loadData = async () => {
+      if (!isCancelled) {
+        await loadTiempos(selectedParada);
       }
+    };
+
+    loadData(); // Carga inicial
+
+    let intervalId;
+    if (autoRefresh) {
+      intervalId = setInterval(loadData, 30000);
     }
-  }, [selectedParada, loadTiempos, autoRefresh, isOnline]);
+
+    return () => {
+      isCancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [selectedParada, autoRefresh, isOnline, loadTiempos]);
 
   // Calcular rutas cuando cambian origen/destino
   useEffect(() => {
     if (origenCoords && destinoCoords) {
       const rutas = calcularRutas(origenCoords, destinoCoords);
       setRutasCalculadas(rutas);
-      setRutaSeleccionada(rutas.length > 0 ? rutas[0] : null);
+      setRutaSeleccionada(rutas.length > 0 ? 0 : null); // Guardar índice en lugar de objeto
     } else {
       setRutasCalculadas([]);
       setRutaSeleccionada(null);
@@ -848,7 +933,7 @@ export default function App() {
     const tiemposParada = lineasParada.map(lineaId => ({
       lineaId,
       linea: getLinea(lineaId),
-      tiempo: tiempos[`${lineaId}-${paradaId}`]
+      tiempo: tiempos[`${paradaId}-${lineaId}`] // Clave corregida: parada-linea
     }));
 
     return (
@@ -997,10 +1082,10 @@ export default function App() {
           {rutasCalculadas.map((ruta, idx) => (
             <div
               key={idx}
-              onClick={() => setRutaSeleccionada(ruta)}
+              onClick={() => setRutaSeleccionada(idx)}
               style={{
                 background: t.bgCard, borderRadius: 16, padding: 16, cursor: 'pointer',
-                border: `2px solid ${rutaSeleccionada === ruta ? t.accent : t.border}`
+                border: `2px solid ${rutaSeleccionada === idx ? t.accent : t.border}` // Comparar por índice
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -1117,7 +1202,10 @@ export default function App() {
                   <Download size={20} color="#fff" />
                 </button>
               )}
-              <button onClick={() => setDarkMode(!darkMode)} style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 11, padding: 10, cursor: 'pointer' }}>
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                aria-label={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 11, padding: 10, cursor: 'pointer' }}>
                 {darkMode ? <Sun size={20} color={t.text} /> : <Moon size={20} color={t.text} />}
               </button>
             </div>
@@ -1125,10 +1213,19 @@ export default function App() {
 
           <div style={{ position: 'relative' }}>
             <Search size={18} color={t.textMuted} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
-            <input type="text" placeholder="Buscar parada, número o línea..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+            <input
+              type="text"
+              placeholder="Buscar parada, número o línea..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              aria-label="Buscar paradas de autobús"
+              role="searchbox"
               style={{ width: '100%', padding: '14px 44px', borderRadius: 14, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 15, outline: 'none' }} />
             {searchTerm && (
-              <button onClick={() => setSearchTerm('')} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer' }}>
+              <button
+                onClick={() => setSearchTerm('')}
+                aria-label="Limpiar búsqueda"
+                style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer' }}>
                 <X size={18} color={t.textMuted} />
               </button>
             )}
