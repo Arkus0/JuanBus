@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea"/>
+      <stop offset="100%" style="stop-color:#764ba2"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" rx="102" fill="url(#bg)"/>
+  
+  <!-- Bus icon -->
+  <g transform="translate(96, 116)" fill="none" stroke="white" stroke-width="20" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Bus body -->
+    <path d="M40 40 L40 220 L280 220 L280 40 C280 20 260 0 240 0 L80 0 C60 0 40 20 40 40"/>
+    
+    <!-- Windows -->
+    <rect x="70" y="50" width="70" height="60" rx="8" fill="white" fill-opacity="0.3"/>
+    <rect x="180" y="50" width="70" height="60" rx="8" fill="white" fill-opacity="0.3"/>
+    
+    <!-- Door line -->
+    <line x1="160" y1="130" x2="160" y2="220"/>
+    
+    <!-- Wheels -->
+    <circle cx="100" cy="240" r="30" fill="white"/>
+    <circle cx="220" cy="240" r="30" fill="white"/>
+    
+    <!-- Wheel centers -->
+    <circle cx="100" cy="240" r="12" fill="#764ba2"/>
+    <circle cx="220" cy="240" r="12" fill="#764ba2"/>
+    
+    <!-- Front -->
+    <rect x="40" y="170" width="240" height="20" rx="4" fill="white" fill-opacity="0.2"/>
+  </g>
+  
+  <!-- Plus sign -->
+  <g transform="translate(360, 360)">
+    <circle cx="50" cy="50" r="50" fill="#00d4aa"/>
+    <path d="M50 25 L50 75 M25 50 L75 50" stroke="white" stroke-width="12" stroke-linecap="round"/>
+  </g>
+</svg>
