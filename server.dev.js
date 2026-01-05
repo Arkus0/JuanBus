@@ -1,5 +1,5 @@
 // server.dev.js
-// Servidor de desarrollo que simula las API routes de Vercel
+// Servidor de desarrollo que simula el proxy de Surbus
 // Usar solo para desarrollo local: node server.dev.js
 
 import http from 'http';
@@ -7,73 +7,116 @@ import https from 'https';
 
 const PORT = 3001;
 
+function httpsGet(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, options, (res) => {
+      let data = '';
+      const cookies = res.headers['set-cookie'] || [];
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => resolve({ data, cookies, status: res.statusCode }));
+    });
+    req.on('error', reject);
+    req.setTimeout(15000, () => { req.destroy(); reject(new Error('Timeout')); });
+  });
+}
+
 const server = http.createServer(async (req, res) => {
-  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Content-Type', 'application/json');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(200);
-    res.end();
-    return;
+    return res.end();
   }
 
   const url = new URL(req.url, `http://localhost:${PORT}`);
   
-  // Solo manejar /api/surbus
   if (!url.pathname.startsWith('/api/surbus')) {
     res.writeHead(404);
-    res.end(JSON.stringify({ error: 'Not found' }));
-    return;
+    return res.end(JSON.stringify({ error: 'Not found' }));
   }
 
-  const linea = url.searchParams.get('l');
-  const parada = url.searchParams.get('bs');
+  const lineaNum = url.searchParams.get('l');
+  const paradaNum = url.searchParams.get('bs');
 
-  if (!linea || !parada) {
+  if (!lineaNum || !paradaNum) {
     res.writeHead(400);
-    res.end(JSON.stringify({ success: false, error: 'Faltan parámetros l y bs' }));
-    return;
+    return res.end(JSON.stringify({ success: false, error: 'Faltan parámetros l y bs' }));
   }
 
-  const apiUrl = `https://www.surbusalmeria.es/API/GetWaitTime?l=${linea}&bs=${parada}`;
-  
-  console.log(`[PROXY] ${apiUrl}`);
+  console.log(`[PROXY] Línea ${lineaNum}, Parada ${paradaNum}`);
 
   try {
-    const data = await new Promise((resolve, reject) => {
-      https.get(apiUrl, {
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        }
-      }, (response) => {
-        let body = '';
-        response.on('data', chunk => body += chunk);
-        response.on('end', () => {
-          try {
-            resolve(JSON.parse(body));
-          } catch (e) {
-            reject(new Error(`Invalid JSON: ${body.substring(0, 100)}`));
-          }
-        });
-      }).on('error', reject);
+    // 1. Obtener página de la línea
+    const lineaPageUrl = `https://www.surbusalmeria.es/tiempos-de-espera/linea/${lineaNum}`;
+    console.log(`[PROXY] Cargando ${lineaPageUrl}`);
+    
+    const pageResult = await httpsGet(lineaPageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html',
+      }
     });
 
-    console.log(`[PROXY] OK:`, data);
+    // Extraer sesión
+    const sessionCookie = pageResult.cookies.find(c => c.includes('ASP.NET_SessionId'));
+    const sessionMatch = sessionCookie?.match(/ASP\.NET_SessionId=([^;]+)/);
+    const sessionId = sessionMatch?.[1];
+
+    if (!sessionId) {
+      res.writeHead(502);
+      return res.end(JSON.stringify({ success: false, error: 'No session' }));
+    }
+
+    console.log(`[PROXY] Sesión: ${sessionId.substring(0, 8)}...`);
+
+    // 2. Extraer GUIDs
+    const regex = new RegExp(
+      `ConfigureButton\\s*\\(\\s*"[^"]+",\\s*"([^"]+)",\\s*"([^"]+)",\\s*"([^"]+)",\\s*\\d+,\\s*${paradaNum},\\s*(\\d+)\\s*\\)`,
+      'i'
+    );
+    
+    const match = pageResult.data.match(regex);
+
+    if (!match) {
+      res.writeHead(404);
+      return res.end(JSON.stringify({ 
+        success: false, 
+        error: `Parada ${paradaNum} no encontrada en línea ${lineaNum}` 
+      }));
+    }
+
+    const [, lineGuid, busStopGuid, lineBusStopGuid, nodeType] = match;
+    console.log(`[PROXY] GUIDs encontrados`);
+
+    // 3. Llamar a la API
+    const apiUrl = `https://www.surbusalmeria.es/API/GetWaitTime?l=${lineGuid}&bs=${busStopGuid}&lbs=${lineBusStopGuid}&n=${paradaNum}&nt=${nodeType}&noCache=${Date.now()}`;
+    
+    const apiResult = await httpsGet(apiUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Referer': lineaPageUrl,
+        'Cookie': `ASP.NET_SessionId=${sessionId}`,
+      }
+    });
+
+    const data = JSON.parse(apiResult.data);
+    console.log(`[PROXY] Respuesta:`, data);
+
     res.writeHead(200);
     res.end(JSON.stringify(data));
-    
+
   } catch (error) {
     console.error(`[PROXY] Error:`, error.message);
-    res.writeHead(502);
+    res.writeHead(500);
     res.end(JSON.stringify({ success: false, error: error.message }));
   }
 });
 
 server.listen(PORT, () => {
-  console.log(`\n🚌 Surbus API Proxy corriendo en http://localhost:${PORT}`);
-  console.log(`\nPrueba: http://localhost:${PORT}/api/surbus?l=1&bs=7\n`);
+  console.log(`\n🚌 Surbus Proxy corriendo en http://localhost:${PORT}`);
+  console.log(`\nPrueba: http://localhost:${PORT}/api/surbus?l=5&bs=51\n`);
 });

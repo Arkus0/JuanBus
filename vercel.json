@@ -2,10 +2,10 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
-  "regions": ["cdg1"],
   "functions": {
     "api/surbus.js": {
-      "maxDuration": 10
+      "maxDuration": 30,
+      "memory": 256
     }
   },
   "rewrites": [
