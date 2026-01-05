@@ -66,107 +66,162 @@ const fetchTiempoEspera = async (paradaId, lineaId) => {
 // ALGORITMO DE PLANIFICACIÓN DE RUTAS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const calcularRutas = (origenId, destinoId) => {
-  if (!origenId || !destinoId || origenId === destinoId) return [];
+const calcularRutas = (origenCoords, destinoCoords) => {
+  if (!origenCoords || !destinoCoords) return [];
 
-  const origen = PARADAS.find(p => p.id === origenId);
-  const destino = PARADAS.find(p => p.id === destinoId);
-  if (!origen || !destino) return [];
+  const UMBRAL_TRANSBORDO = 500; // Metros - solo hacer transbordo si ahorra >500m andando
+  const MAX_DISTANCIA_PARADA = 800; // Metros - radio para buscar paradas cercanas
 
   const rutas = [];
 
-  // 1. RUTAS DIRECTAS (sin transbordo)
-  const lineasComunes = origen.lineas.filter(l => destino.lineas.includes(l));
-  lineasComunes.forEach(lineaId => {
-    const linea = getLinea(lineaId);
-    const paradasLinea = PARADAS.filter(p => p.lineas.includes(lineaId));
-    const idxOrigen = paradasLinea.findIndex(p => p.id === origenId);
-    const idxDestino = paradasLinea.findIndex(p => p.id === destinoId);
+  // 1. Encontrar paradas cercanas al origen y destino
+  const paradasOrigen = PARADAS.map(p => ({
+    ...p,
+    distanciaAlOrigen: haversineDistance(origenCoords.lat, origenCoords.lng, p.lat, p.lng)
+  })).filter(p => p.distanciaAlOrigen <= MAX_DISTANCIA_PARADA)
+    .sort((a, b) => a.distanciaAlOrigen - b.distanciaAlOrigen)
+    .slice(0, 10); // Top 10 paradas más cercanas al origen
 
-    if (idxOrigen !== -1 && idxDestino !== -1) {
-      const numParadas = Math.abs(idxDestino - idxOrigen);
-      const tiempoEstimado = numParadas * 2 + 3; // ~2 min por parada + 3 min buffer
+  const paradasDestino = PARADAS.map(p => ({
+    ...p,
+    distanciaAlDestino: haversineDistance(destinoCoords.lat, destinoCoords.lng, p.lat, p.lng)
+  })).filter(p => p.distanciaAlDestino <= MAX_DISTANCIA_PARADA)
+    .sort((a, b) => a.distanciaAlDestino - b.distanciaAlDestino)
+    .slice(0, 10); // Top 10 paradas más cercanas al destino
 
-      rutas.push({
-        tipo: 'directa',
-        lineas: [lineaId],
-        paradas: [origen, destino],
-        numParadas,
-        tiempoEstimado,
-        detalles: `Línea ${lineaId} directa`,
-        segmentos: [{
-          linea: lineaId,
-          color: linea.color,
-          nombre: linea.nombre,
-          desde: origen.nombre,
-          hasta: destino.nombre,
-          paradas: numParadas
-        }]
-      });
-    }
-  });
+  if (paradasOrigen.length === 0 || paradasDestino.length === 0) return [];
 
-  // 2. RUTAS CON UN TRANSBORDO
-  origen.lineas.forEach(lineaOrigen => {
-    const paradasLineaOrigen = PARADAS.filter(p => p.lineas.includes(lineaOrigen));
+  // 2. RUTAS DIRECTAS (sin transbordo)
+  paradasOrigen.forEach(paradaOrigen => {
+    paradasDestino.forEach(paradaDestino => {
+      if (paradaOrigen.id === paradaDestino.id) return;
 
-    paradasLineaOrigen.forEach(paradaIntermedia => {
-      if (paradaIntermedia.id === origenId || paradaIntermedia.id === destinoId) return;
+      // Buscar líneas en común
+      const lineasComunes = paradaOrigen.lineas.filter(l => paradaDestino.lineas.includes(l));
 
-      const lineasTransbordo = paradaIntermedia.lineas.filter(l =>
-        l !== lineaOrigen && destino.lineas.includes(l)
-      );
+      lineasComunes.forEach(lineaId => {
+        const linea = getLinea(lineaId);
+        const distanciaAndando = paradaOrigen.distanciaAlOrigen + paradaDestino.distanciaAlDestino;
+        const tiempoEstimado = Math.round(distanciaAndando / 70) + 10; // ~70m/min andando + 10min bus aprox
 
-      lineasTransbordo.forEach(lineaDestino => {
-        const lineaO = getLinea(lineaOrigen);
-        const lineaD = getLinea(lineaDestino);
-
-        const paradasLineaDestino = PARADAS.filter(p => p.lineas.includes(lineaDestino));
-
-        const idxOrigen = paradasLineaOrigen.findIndex(p => p.id === origenId);
-        const idxIntermedia1 = paradasLineaOrigen.findIndex(p => p.id === paradaIntermedia.id);
-        const idxIntermedia2 = paradasLineaDestino.findIndex(p => p.id === paradaIntermedia.id);
-        const idxDestino = paradasLineaDestino.findIndex(p => p.id === destinoId);
-
-        if (idxOrigen !== -1 && idxIntermedia1 !== -1 && idxIntermedia2 !== -1 && idxDestino !== -1) {
-          const numParadas1 = Math.abs(idxIntermedia1 - idxOrigen);
-          const numParadas2 = Math.abs(idxDestino - idxIntermedia2);
-          const numParadas = numParadas1 + numParadas2;
-          const tiempoEstimado = numParadas * 2 + 5; // +5 min para transbordo
-
-          rutas.push({
-            tipo: 'transbordo',
-            lineas: [lineaOrigen, lineaDestino],
-            paradas: [origen, paradaIntermedia, destino],
-            numParadas,
-            tiempoEstimado,
-            detalles: `L${lineaOrigen} → L${lineaDestino} en ${paradaIntermedia.nombre}`,
-            segmentos: [
-              {
-                linea: lineaOrigen,
-                color: lineaO.color,
-                nombre: lineaO.nombre,
-                desde: origen.nombre,
-                hasta: paradaIntermedia.nombre,
-                paradas: numParadas1
-              },
-              {
-                linea: lineaDestino,
-                color: lineaD.color,
-                nombre: lineaD.nombre,
-                desde: paradaIntermedia.nombre,
-                hasta: destino.nombre,
-                paradas: numParadas2
-              }
-            ]
-          });
-        }
+        rutas.push({
+          tipo: 'directa',
+          lineas: [lineaId],
+          paradas: [paradaOrigen, paradaDestino],
+          distanciaAndando,
+          tiempoEstimado,
+          detalles: `Línea ${lineaId}`,
+          segmentos: [{
+            tipo: 'caminar',
+            distancia: paradaOrigen.distanciaAlOrigen,
+            desde: 'Origen',
+            hasta: paradaOrigen.nombre
+          }, {
+            tipo: 'bus',
+            linea: lineaId,
+            color: linea.color,
+            nombre: linea.nombre,
+            desde: paradaOrigen.nombre,
+            hasta: paradaDestino.nombre
+          }, {
+            tipo: 'caminar',
+            distancia: paradaDestino.distanciaAlDestino,
+            desde: paradaDestino.nombre,
+            hasta: 'Destino'
+          }]
+        });
       });
     });
   });
 
-  // Ordenar por tiempo estimado
-  return rutas.sort((a, b) => a.tiempoEstimado - b.tiempoEstimado).slice(0, 5);
+  // 3. RUTAS CON TRANSBORDO (solo si mejora significativamente la distancia andando)
+  const mejorRutaDirecta = rutas.length > 0
+    ? rutas.reduce((min, r) => r.distanciaAndando < min.distanciaAndando ? r : min, rutas[0])
+    : null;
+
+  if (mejorRutaDirecta && mejorRutaDirecta.distanciaAndando > UMBRAL_TRANSBORDO) {
+    paradasOrigen.forEach(paradaOrigen => {
+      paradaOrigen.lineas.forEach(lineaOrigen => {
+        const paradasLineaOrigen = PARADAS.filter(p => p.lineas.includes(lineaOrigen));
+
+        paradasLineaOrigen.forEach(paradaTransbordo => {
+          if (paradaTransbordo.id === paradaOrigen.id) return;
+
+          const distanciaTransbordo = haversineDistance(
+            paradaTransbordo.lat, paradaTransbordo.lng,
+            destinoCoords.lat, destinoCoords.lng
+          );
+
+          // Buscar líneas que conecten al destino desde el transbordo
+          paradasDestino.forEach(paradaDestino => {
+            if (paradaDestino.id === paradaTransbordo.id) return;
+
+            const lineasTransbordo = paradaTransbordo.lineas.filter(l =>
+              l !== lineaOrigen && paradaDestino.lineas.includes(l)
+            );
+
+            lineasTransbordo.forEach(lineaDestino => {
+              const lineaO = getLinea(lineaOrigen);
+              const lineaD = getLinea(lineaDestino);
+
+              const distanciaAndando = paradaOrigen.distanciaAlOrigen + paradaDestino.distanciaAlDestino;
+
+              // Solo añadir si mejora significativamente vs ruta directa
+              if (!mejorRutaDirecta || (mejorRutaDirecta.distanciaAndando - distanciaAndando) > UMBRAL_TRANSBORDO) {
+                const tiempoEstimado = Math.round(distanciaAndando / 70) + 20; // +20min por bus y transbordo
+
+                rutas.push({
+                  tipo: 'transbordo',
+                  lineas: [lineaOrigen, lineaDestino],
+                  paradas: [paradaOrigen, paradaTransbordo, paradaDestino],
+                  distanciaAndando,
+                  tiempoEstimado,
+                  detalles: `L${lineaOrigen} → L${lineaDestino}`,
+                  segmentos: [{
+                    tipo: 'caminar',
+                    distancia: paradaOrigen.distanciaAlOrigen,
+                    desde: 'Origen',
+                    hasta: paradaOrigen.nombre
+                  }, {
+                    tipo: 'bus',
+                    linea: lineaOrigen,
+                    color: lineaO.color,
+                    nombre: lineaO.nombre,
+                    desde: paradaOrigen.nombre,
+                    hasta: paradaTransbordo.nombre
+                  }, {
+                    tipo: 'transbordo',
+                    en: paradaTransbordo.nombre
+                  }, {
+                    tipo: 'bus',
+                    linea: lineaDestino,
+                    color: lineaD.color,
+                    nombre: lineaD.nombre,
+                    desde: paradaTransbordo.nombre,
+                    hasta: paradaDestino.nombre
+                  }, {
+                    tipo: 'caminar',
+                    distancia: paradaDestino.distanciaAlDestino,
+                    desde: paradaDestino.nombre,
+                    hasta: 'Destino'
+                  }]
+                });
+              }
+            });
+          });
+        });
+      });
+    });
+  }
+
+  // Ordenar por distancia andando (prioridad) y luego por tiempo
+  return rutas
+    .sort((a, b) => {
+      const diffAndando = a.distanciaAndando - b.distanciaAndando;
+      if (Math.abs(diffAndando) > 100) return diffAndando; // Si la diferencia es >100m, priorizar menos andando
+      return a.tiempoEstimado - b.tiempoEstimado; // Sino, el más rápido
+    })
+    .slice(0, 5);
 };
 
 // Fix para iconos de Leaflet
@@ -242,8 +297,8 @@ export default function App() {
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   // Estados del planificador de rutas
-  const [origenId, setOrigenId] = useState(null);
-  const [destinoId, setDestinoId] = useState(null);
+  const [origenCoords, setOrigenCoords] = useState(null); // { lat, lng, nombre }
+  const [destinoCoords, setDestinoCoords] = useState(null); // { lat, lng, nombre }
   const [rutasCalculadas, setRutasCalculadas] = useState([]);
   const [rutaSeleccionada, setRutaSeleccionada] = useState(null);
 
@@ -330,15 +385,15 @@ export default function App() {
 
   // Calcular rutas cuando cambian origen/destino
   useEffect(() => {
-    if (origenId && destinoId) {
-      const rutas = calcularRutas(origenId, destinoId);
+    if (origenCoords && destinoCoords) {
+      const rutas = calcularRutas(origenCoords, destinoCoords);
       setRutasCalculadas(rutas);
       setRutaSeleccionada(rutas.length > 0 ? rutas[0] : null);
     } else {
       setRutasCalculadas([]);
       setRutaSeleccionada(null);
     }
-  }, [origenId, destinoId]);
+  }, [origenCoords, destinoCoords]);
 
   const toggleFavorito = (id) => setFavoritos(prev =>
     prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
@@ -610,7 +665,7 @@ export default function App() {
 
   // Componente de Mapa del Planificador de Rutas
   const MapView = ({ rutas }) => {
-    const center = userLocation || { lat: 36.84, lng: -2.46 }; // Centro de Almería por defecto
+    const center = origenCoords || destinoCoords || userLocation || { lat: 36.84, lng: -2.46 };
 
     return (
       <div style={{ height: 400, borderRadius: 16, overflow: 'hidden', border: `1px solid ${t.border}` }}>
@@ -620,40 +675,34 @@ export default function App() {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          {/* Marcador de ubicación del usuario */}
-          {userLocation && (
-            <Marker position={[userLocation.lat, userLocation.lng]}>
-              <Popup>Tu ubicación</Popup>
+          {/* Marcadores de origen y destino */}
+          {origenCoords && (
+            <Marker position={[origenCoords.lat, origenCoords.lng]}>
+              <Popup><strong>Origen:</strong> {origenCoords.nombre}</Popup>
             </Marker>
           )}
 
-          {/* Marcadores de origen y destino */}
-          {origenId && (() => {
-            const parada = PARADAS.find(p => p.id === origenId);
-            return parada ? (
-              <Marker position={[parada.lat, parada.lng]}>
-                <Popup><strong>Origen:</strong> {parada.nombre}</Popup>
-              </Marker>
-            ) : null;
-          })()}
-
-          {destinoId && (() => {
-            const parada = PARADAS.find(p => p.id === destinoId);
-            return parada ? (
-              <Marker position={[parada.lat, parada.lng]}>
-                <Popup><strong>Destino:</strong> {parada.nombre}</Popup>
-              </Marker>
-            ) : null;
-          })()}
+          {destinoCoords && (
+            <Marker position={[destinoCoords.lat, destinoCoords.lng]}>
+              <Popup><strong>Destino:</strong> {destinoCoords.nombre}</Popup>
+            </Marker>
+          )}
 
           {/* Trazar ruta seleccionada */}
           {rutaSeleccionada && rutaSeleccionada.paradas.length > 0 && (
-            <Polyline
-              positions={rutaSeleccionada.paradas.map(p => [p.lat, p.lng])}
-              color={rutaSeleccionada.segmentos[0].color}
-              weight={4}
-              opacity={0.7}
-            />
+            <>
+              {rutaSeleccionada.paradas.map((parada, idx) => (
+                <Marker key={idx} position={[parada.lat, parada.lng]}>
+                  <Popup>{parada.nombre}</Popup>
+                </Marker>
+              ))}
+              <Polyline
+                positions={rutaSeleccionada.paradas.map(p => [p.lat, p.lng])}
+                color={rutaSeleccionada.lineas.length > 0 ? getLinea(rutaSeleccionada.lineas[0]).color : t.accent}
+                weight={4}
+                opacity={0.7}
+              />
+            </>
           )}
         </MapContainer>
       </div>
@@ -661,7 +710,7 @@ export default function App() {
   };
 
   // Componente Selector de Parada
-  const ParadaSelector = ({ label, value, onChange, placeholder }) => {
+  const LocationSelector = ({ label, value, onChange, placeholder }) => {
     const [searchLocal, setSearchLocal] = useState('');
     const [showDropdown, setShowDropdown] = useState(false);
 
@@ -674,8 +723,6 @@ export default function App() {
       ).slice(0, 20);
     }, [searchLocal]);
 
-    const selectedParada = PARADAS.find(p => p.id === value);
-
     return (
       <div style={{ position: 'relative' }}>
         <label style={{ display: 'block', color: t.text, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{label}</label>
@@ -683,8 +730,8 @@ export default function App() {
           background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: '12px 14px',
           cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
         }}>
-          <span style={{ color: selectedParada ? t.text : t.textMuted, fontSize: 14 }}>
-            {selectedParada ? `${selectedParada.nombre} (${selectedParada.id})` : placeholder}
+          <span style={{ color: value ? t.text : t.textMuted, fontSize: 14 }}>
+            {value ? value.nombre : placeholder}
           </span>
           <ChevronDown size={18} color={t.textMuted} style={{ transform: showDropdown ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
         </div>
@@ -695,6 +742,32 @@ export default function App() {
             border: `1px solid ${t.border}`, borderRadius: 12, maxHeight: 300, overflowY: 'auto', zIndex: 100,
             boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
           }}>
+            {/* Opción "Mi ubicación" */}
+            {userLocation && (
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange({ lat: userLocation.lat, lng: userLocation.lng, nombre: 'Mi ubicación' });
+                  setShowDropdown(false);
+                }}
+                style={{
+                  padding: '12px 14px',
+                  cursor: 'pointer',
+                  background: value?.nombre === 'Mi ubicación' ? t.bgHover : 'transparent',
+                  borderBottom: `1px solid ${t.border}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10
+                }}
+              >
+                <Locate size={16} color={t.accent} />
+                <div>
+                  <div style={{ color: t.accent, fontSize: 13, fontWeight: 600 }}>Mi ubicación</div>
+                  <div style={{ color: t.textMuted, fontSize: 11, marginTop: 2 }}>Usar mi posición actual</div>
+                </div>
+              </div>
+            )}
+
             <div style={{ padding: 10, borderBottom: `1px solid ${t.border}`, position: 'sticky', top: 0, background: t.bgCard }}>
               <input
                 type="text"
@@ -714,12 +787,12 @@ export default function App() {
                   key={p.id}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onChange(p.id);
+                    onChange({ lat: p.lat, lng: p.lng, nombre: p.nombre });
                     setShowDropdown(false);
                     setSearchLocal('');
                   }}
                   style={{
-                    padding: '10px 14px', cursor: 'pointer', background: value === p.id ? t.bgHover : 'transparent',
+                    padding: '10px 14px', cursor: 'pointer', background: value?.nombre === p.nombre ? t.bgHover : 'transparent',
                     borderBottom: `1px solid ${t.border}`
                   }}
                 >
@@ -862,44 +935,27 @@ export default function App() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <ParadaSelector
+          <LocationSelector
             label="Origen"
-            value={origenId}
-            onChange={setOrigenId}
-            placeholder="Selecciona parada de origen"
+            value={origenCoords}
+            onChange={setOrigenCoords}
+            placeholder="Selecciona ubicación de origen"
           />
 
-          <ParadaSelector
+          <LocationSelector
             label="Destino"
-            value={destinoId}
-            onChange={setDestinoId}
-            placeholder="Selecciona parada de destino"
+            value={destinoCoords}
+            onChange={setDestinoCoords}
+            placeholder="Selecciona ubicación de destino"
           />
-
-          {/* Botón para usar ubicación actual */}
-          {userLocation && (
-            <button
-              onClick={() => {
-                const paradaCercana = paradasCercanas[0];
-                if (paradaCercana) setOrigenId(paradaCercana.id);
-              }}
-              style={{
-                background: t.accent, color: '#fff', border: 'none', borderRadius: 10, padding: '10px 14px',
-                fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center'
-              }}
-            >
-              <Locate size={16} />
-              Usar parada más cercana como origen
-            </button>
-          )}
 
           {/* Botón intercambiar */}
-          {origenId && destinoId && (
+          {origenCoords && destinoCoords && (
             <button
               onClick={() => {
-                const temp = origenId;
-                setOrigenId(destinoId);
-                setDestinoId(temp);
+                const temp = origenCoords;
+                setOrigenCoords(destinoCoords);
+                setDestinoCoords(temp);
               }}
               style={{
                 background: t.bgHover, color: t.text, border: `1px solid ${t.border}`, borderRadius: 10, padding: '10px 14px',
@@ -914,7 +970,7 @@ export default function App() {
       </div>
 
       {/* Mapa */}
-      {(origenId || destinoId) && <MapView rutas={rutasCalculadas} />}
+      {(origenCoords || destinoCoords) && <MapView rutas={rutasCalculadas} />}
 
       {/* Resultados de rutas */}
       {rutasCalculadas.length > 0 && (
@@ -940,7 +996,7 @@ export default function App() {
                     <Navigation size={20} color={t.warning} />
                   )}
                   <span style={{ color: t.text, fontSize: 15, fontWeight: 600 }}>
-                    {ruta.tipo === 'directa' ? 'Ruta directa' : 'Con transbordo'}
+                    {ruta.detalles}
                   </span>
                 </div>
                 <div style={{ background: `${t.accent}20`, borderRadius: 10, padding: '6px 12px' }}>
@@ -948,29 +1004,45 @@ export default function App() {
                 </div>
               </div>
 
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                <MapPin size={14} color={t.textMuted} />
+                <span style={{ color: t.textMuted, fontSize: 12 }}>
+                  Andando: {formatDistance(ruta.distanciaAndando)}
+                </span>
+              </div>
+
               {ruta.segmentos.map((seg, sidx) => (
                 <div key={sidx} style={{ marginBottom: sidx < ruta.segmentos.length - 1 ? 10 : 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                    <div style={{
-                      width: 32, height: 32, borderRadius: 8, background: seg.color,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}>
-                      <span style={{ color: '#fff', fontWeight: 800, fontSize: 12 }}>L{seg.linea}</span>
+                  {seg.tipo === 'caminar' ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
+                      <MapPin size={16} color={t.textMuted} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ color: t.textMuted, fontSize: 12 }}>
+                          Caminar {formatDistance(seg.distancia)} • {seg.desde} → {seg.hasta}
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ color: t.text, fontSize: 13, fontWeight: 600 }}>{seg.nombre}</div>
-                      <div style={{ color: t.textMuted, fontSize: 12 }}>{seg.paradas} paradas</div>
+                  ) : seg.tipo === 'bus' ? (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                        <div style={{
+                          width: 32, height: 32, borderRadius: 8, background: seg.color,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                          <span style={{ color: '#fff', fontWeight: 800, fontSize: 12 }}>L{seg.linea}</span>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ color: t.text, fontSize: 13, fontWeight: 600 }}>{seg.nombre}</div>
+                          <div style={{ color: t.textMuted, fontSize: 12 }}>{seg.desde} → {seg.hasta}</div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div style={{ color: t.textMuted, fontSize: 12, marginLeft: 42 }}>
-                    {seg.desde} → {seg.hasta}
-                  </div>
-                  {sidx < ruta.segmentos.length - 1 && (
-                    <div style={{ marginLeft: 42, marginTop: 8, color: t.warning, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <RefreshCw size={12} />
-                      Transbordo en {ruta.paradas[sidx + 1].nombre}
+                  ) : seg.tipo === 'transbordo' ? (
+                    <div style={{ margin: '8px 0', padding: '8px 12px', background: `${t.warning}20`, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <RefreshCw size={14} color={t.warning} />
+                      <span style={{ color: t.warning, fontSize: 12, fontWeight: 600 }}>Transbordo en {seg.en}</span>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -978,22 +1050,22 @@ export default function App() {
         </div>
       )}
 
-      {origenId && destinoId && rutasCalculadas.length === 0 && (
+      {origenCoords && destinoCoords && rutasCalculadas.length === 0 && (
         <div style={{ background: t.bgCard, borderRadius: 16, padding: 40, textAlign: 'center', border: `1px solid ${t.border}` }}>
           <AlertTriangle size={48} color={t.warning} style={{ opacity: 0.5 }} />
           <p style={{ color: t.text, marginTop: 16, fontSize: 15 }}>No se encontraron rutas disponibles</p>
           <p style={{ color: t.textMuted, fontSize: 13, marginTop: 8 }}>
-            Intenta seleccionar otras paradas o verifica que existan líneas que conecten estos puntos.
+            No hay paradas cercanas a las ubicaciones seleccionadas o no existen líneas que las conecten.
           </p>
         </div>
       )}
 
-      {!origenId && !destinoId && (
+      {!origenCoords && !destinoCoords && (
         <div style={{ background: t.bgCard, borderRadius: 16, padding: 40, textAlign: 'center', border: `1px solid ${t.border}` }}>
           <MapIcon size={48} color={t.accent} style={{ opacity: 0.5 }} />
           <p style={{ color: t.text, marginTop: 16, fontSize: 15 }}>Selecciona origen y destino</p>
           <p style={{ color: t.textMuted, fontSize: 13, marginTop: 8 }}>
-            Elige las paradas de origen y destino para calcular las mejores rutas disponibles.
+            Elige ubicaciones de origen y destino para calcular las mejores rutas disponibles. Puedes usar tu ubicación actual.
           </p>
         </div>
       )}
