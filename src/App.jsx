@@ -797,7 +797,7 @@ export default function App() {
                 <Bus size={26} color="#fff" />
               </div>
               <div>
-                <h1 style={{ color: t.text, margin: 0, fontSize: 22, fontWeight: 800 }}>Surbus<span style={{ color: t.accent }}>+</span></h1>
+                <h1 style={{ color: t.text, margin: 0, fontSize: 22, fontWeight: 800 }}>Juan <span style={{ color: t.accent }}>Bus</span></h1>
                 <p style={{ color: t.textMuted, margin: 0, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                   Almería {isInstalled && <Check size={12} color={t.success} />}
                   {!isOnline && <WifiOff size={12} color={t.warning} />}
@@ -903,7 +903,7 @@ export default function App() {
             {isOnline ? <Wifi size={14} color={t.success} /> : <WifiOff size={14} color={t.danger} />}
             <span style={{ color: t.textMuted, fontSize: 11 }}>{isOnline ? 'Online' : 'Offline'}</span>
           </div>
-          <span style={{ color: t.textMuted, fontSize: 11 }}>Surbus+ v2.0 {isInstalled && '✓'}</span>
+          <span style={{ color: t.textMuted, fontSize: 11 }}>Juan Bus v2.0 {isInstalled && '✓'}</span>
         </div>
       </div>
     </div>

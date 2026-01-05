@@ -1,6 +1,6 @@
-# Surbus+ PWA
+# Juan Bus PWA
 
-App de transporte público de Almería con tiempos de espera en tiempo real.
+App de transporte público de Almería con tiempos de espera en tiempo real y planificador de rutas.
 
 ## 🚀 Despliegue en Vercel (5 minutos)
 
@@ -10,17 +10,17 @@ App de transporte público de Almería con tiempos de espera en tiempo real.
    ```bash
    git init
    git add .
-   git commit -m "Surbus+ PWA v2.0"
-   git remote add origin https://github.com/TU_USUARIO/surbus-plus.git
+   git commit -m "Juan Bus PWA v2.0"
+   git remote add origin https://github.com/TU_USUARIO/juan-bus.git
    git push -u origin main
    ```
 
 2. **Conecta con Vercel:**
    - Ve a [vercel.com](https://vercel.com) y haz login con GitHub
    - Click en "New Project"
-   - Selecciona el repositorio `surbus-plus`
+   - Selecciona el repositorio `juan-bus`
    - Click en "Deploy"
-   - ¡Listo! Tu app estará en `https://surbus-plus.vercel.app`
+   - ¡Listo! Tu app estará en `https://juan-bus.vercel.app`
 
 ### Opción 2: Desde CLI
 
@@ -38,7 +38,7 @@ vercel --prod
 ## 📁 Estructura del proyecto
 
 ```
-surbus-plus/
+juan-bus/
 ├── api/
 │   └── surbus.js      # Proxy API (evita CORS)
 ├── public/
@@ -105,7 +105,10 @@ npm run dev:proxy
 - ✅ Favoritos persistentes
 - ✅ Modo oscuro/claro
 - ✅ Actualización automática de tiempos
-- ✅ 344 paradas de Surbus Almería
+- ✅ 344 paradas de autobuses de Almería
+- ✅ Planificador de rutas con mapa interactivo
+- ✅ Cálculo de rutas directas y con transbordos
+- ✅ Visualización en mapa (Leaflet + OpenStreetMap)
 
 ## 🌐 API Endpoints
 
@@ -120,7 +123,7 @@ GET /api/surbus?action=stops → Lista de paradas
 ## 📱 Instalación como App
 
 1. Abre la web en Chrome/Safari
-2. Aparecerá un banner "Instalar Surbus+"
+2. Aparecerá un banner "Instalar Juan Bus"
 3. O usa el menú del navegador → "Añadir a pantalla de inicio"
 
 ---
