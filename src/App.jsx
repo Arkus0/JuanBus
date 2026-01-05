@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  MapPin, Bus, Clock, Star, Search, Moon, Sun, Navigation, AlertTriangle, 
-  RefreshCw, ChevronRight, X, Heart, Map as MapIcon, Bell, BellOff, Share2, 
-  Route, History, Settings, Locate, ChevronDown, Filter, Zap, Info, 
-  ExternalLink, Wifi, WifiOff, Download, Check, CloudOff 
+import {
+  MapPin, Bus, Clock, Star, Search, Moon, Sun, Navigation, AlertTriangle,
+  RefreshCw, ChevronRight, X, Heart, Map as MapIcon, Bell, BellOff, Share2,
+  History, Settings, Locate, ChevronDown, Filter, Zap, Info,
+  ExternalLink, Wifi, WifiOff, Download, Check, CloudOff
 } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import L from 'leaflet';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DATOS DE SURBUS ALMERÍA
@@ -59,6 +61,121 @@ const fetchTiempoEspera = async (paradaId, lineaId) => {
     return { success: false, error: e.message };
   }
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ALGORITMO DE PLANIFICACIÓN DE RUTAS
+// ═══════════════════════════════════════════════════════════════════════════
+
+const calcularRutas = (origenId, destinoId) => {
+  if (!origenId || !destinoId || origenId === destinoId) return [];
+
+  const origen = PARADAS.find(p => p.id === origenId);
+  const destino = PARADAS.find(p => p.id === destinoId);
+  if (!origen || !destino) return [];
+
+  const rutas = [];
+
+  // 1. RUTAS DIRECTAS (sin transbordo)
+  const lineasComunes = origen.lineas.filter(l => destino.lineas.includes(l));
+  lineasComunes.forEach(lineaId => {
+    const linea = getLinea(lineaId);
+    const paradasLinea = PARADAS.filter(p => p.lineas.includes(lineaId));
+    const idxOrigen = paradasLinea.findIndex(p => p.id === origenId);
+    const idxDestino = paradasLinea.findIndex(p => p.id === destinoId);
+
+    if (idxOrigen !== -1 && idxDestino !== -1) {
+      const numParadas = Math.abs(idxDestino - idxOrigen);
+      const tiempoEstimado = numParadas * 2 + 3; // ~2 min por parada + 3 min buffer
+
+      rutas.push({
+        tipo: 'directa',
+        lineas: [lineaId],
+        paradas: [origen, destino],
+        numParadas,
+        tiempoEstimado,
+        detalles: `Línea ${lineaId} directa`,
+        segmentos: [{
+          linea: lineaId,
+          color: linea.color,
+          nombre: linea.nombre,
+          desde: origen.nombre,
+          hasta: destino.nombre,
+          paradas: numParadas
+        }]
+      });
+    }
+  });
+
+  // 2. RUTAS CON UN TRANSBORDO
+  origen.lineas.forEach(lineaOrigen => {
+    const paradasLineaOrigen = PARADAS.filter(p => p.lineas.includes(lineaOrigen));
+
+    paradasLineaOrigen.forEach(paradaIntermedia => {
+      if (paradaIntermedia.id === origenId || paradaIntermedia.id === destinoId) return;
+
+      const lineasTransbordo = paradaIntermedia.lineas.filter(l =>
+        l !== lineaOrigen && destino.lineas.includes(l)
+      );
+
+      lineasTransbordo.forEach(lineaDestino => {
+        const lineaO = getLinea(lineaOrigen);
+        const lineaD = getLinea(lineaDestino);
+
+        const paradasLineaDestino = PARADAS.filter(p => p.lineas.includes(lineaDestino));
+
+        const idxOrigen = paradasLineaOrigen.findIndex(p => p.id === origenId);
+        const idxIntermedia1 = paradasLineaOrigen.findIndex(p => p.id === paradaIntermedia.id);
+        const idxIntermedia2 = paradasLineaDestino.findIndex(p => p.id === paradaIntermedia.id);
+        const idxDestino = paradasLineaDestino.findIndex(p => p.id === destinoId);
+
+        if (idxOrigen !== -1 && idxIntermedia1 !== -1 && idxIntermedia2 !== -1 && idxDestino !== -1) {
+          const numParadas1 = Math.abs(idxIntermedia1 - idxOrigen);
+          const numParadas2 = Math.abs(idxDestino - idxIntermedia2);
+          const numParadas = numParadas1 + numParadas2;
+          const tiempoEstimado = numParadas * 2 + 5; // +5 min para transbordo
+
+          rutas.push({
+            tipo: 'transbordo',
+            lineas: [lineaOrigen, lineaDestino],
+            paradas: [origen, paradaIntermedia, destino],
+            numParadas,
+            tiempoEstimado,
+            detalles: `L${lineaOrigen} → L${lineaDestino} en ${paradaIntermedia.nombre}`,
+            segmentos: [
+              {
+                linea: lineaOrigen,
+                color: lineaO.color,
+                nombre: lineaO.nombre,
+                desde: origen.nombre,
+                hasta: paradaIntermedia.nombre,
+                paradas: numParadas1
+              },
+              {
+                linea: lineaDestino,
+                color: lineaD.color,
+                nombre: lineaD.nombre,
+                desde: paradaIntermedia.nombre,
+                hasta: destino.nombre,
+                paradas: numParadas2
+              }
+            ]
+          });
+        }
+      });
+    });
+  });
+
+  // Ordenar por tiempo estimado
+  return rutas.sort((a, b) => a.tiempoEstimado - b.tiempoEstimado).slice(0, 5);
+};
+
+// Fix para iconos de Leaflet
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HOOK PWA
@@ -123,6 +240,12 @@ export default function App() {
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+
+  // Estados del planificador de rutas
+  const [origenId, setOrigenId] = useState(null);
+  const [destinoId, setDestinoId] = useState(null);
+  const [rutasCalculadas, setRutasCalculadas] = useState([]);
+  const [rutaSeleccionada, setRutaSeleccionada] = useState(null);
 
   // Tema
   const t = darkMode ? {
@@ -196,7 +319,19 @@ export default function App() {
     }
   }, [selectedParada, loadTiempos, autoRefresh, isOnline]);
 
-  const toggleFavorito = (id) => setFavoritos(prev => 
+  // Calcular rutas cuando cambian origen/destino
+  useEffect(() => {
+    if (origenId && destinoId) {
+      const rutas = calcularRutas(origenId, destinoId);
+      setRutasCalculadas(rutas);
+      setRutaSeleccionada(rutas.length > 0 ? rutas[0] : null);
+    } else {
+      setRutasCalculadas([]);
+      setRutaSeleccionada(null);
+    }
+  }, [origenId, destinoId]);
+
+  const toggleFavorito = (id) => setFavoritos(prev =>
     prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
   );
 
@@ -370,6 +505,281 @@ export default function App() {
     </div>
   );
 
+  // Componente de Mapa
+  const MapView = ({ rutas }) => {
+    const center = userLocation || { lat: 36.84, lng: -2.46 }; // Centro de Almería por defecto
+
+    return (
+      <div style={{ height: 400, borderRadius: 16, overflow: 'hidden', border: `1px solid ${t.border}` }}>
+        <MapContainer center={[center.lat, center.lng]} zoom={13} style={{ height: '100%', width: '100%' }}>
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+
+          {/* Marcador de ubicación del usuario */}
+          {userLocation && (
+            <Marker position={[userLocation.lat, userLocation.lng]}>
+              <Popup>Tu ubicación</Popup>
+            </Marker>
+          )}
+
+          {/* Marcadores de origen y destino */}
+          {origenId && (() => {
+            const parada = PARADAS.find(p => p.id === origenId);
+            return parada ? (
+              <Marker position={[parada.lat, parada.lng]}>
+                <Popup><strong>Origen:</strong> {parada.nombre}</Popup>
+              </Marker>
+            ) : null;
+          })()}
+
+          {destinoId && (() => {
+            const parada = PARADAS.find(p => p.id === destinoId);
+            return parada ? (
+              <Marker position={[parada.lat, parada.lng]}>
+                <Popup><strong>Destino:</strong> {parada.nombre}</Popup>
+              </Marker>
+            ) : null;
+          })()}
+
+          {/* Trazar ruta seleccionada */}
+          {rutaSeleccionada && rutaSeleccionada.paradas.length > 0 && (
+            <Polyline
+              positions={rutaSeleccionada.paradas.map(p => [p.lat, p.lng])}
+              color={rutaSeleccionada.segmentos[0].color}
+              weight={4}
+              opacity={0.7}
+            />
+          )}
+        </MapContainer>
+      </div>
+    );
+  };
+
+  // Componente Selector de Parada
+  const ParadaSelector = ({ label, value, onChange, placeholder }) => {
+    const [searchLocal, setSearchLocal] = useState('');
+    const [showDropdown, setShowDropdown] = useState(false);
+
+    const paradasFiltradas = useMemo(() => {
+      if (!searchLocal) return PARADAS.slice(0, 50);
+      const term = searchLocal.toLowerCase();
+      return PARADAS.filter(p =>
+        p.nombre.toLowerCase().includes(term) ||
+        p.id.toString().includes(term)
+      ).slice(0, 20);
+    }, [searchLocal]);
+
+    const selectedParada = PARADAS.find(p => p.id === value);
+
+    return (
+      <div style={{ position: 'relative' }}>
+        <label style={{ display: 'block', color: t.text, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{label}</label>
+        <div onClick={() => setShowDropdown(!showDropdown)} style={{
+          background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: '12px 14px',
+          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+        }}>
+          <span style={{ color: selectedParada ? t.text : t.textMuted, fontSize: 14 }}>
+            {selectedParada ? `${selectedParada.nombre} (${selectedParada.id})` : placeholder}
+          </span>
+          <ChevronDown size={18} color={t.textMuted} style={{ transform: showDropdown ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
+        </div>
+
+        {showDropdown && (
+          <div style={{
+            position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: t.bgCard,
+            border: `1px solid ${t.border}`, borderRadius: 12, maxHeight: 300, overflowY: 'auto', zIndex: 100,
+            boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
+          }}>
+            <div style={{ padding: 10, borderBottom: `1px solid ${t.border}`, position: 'sticky', top: 0, background: t.bgCard }}>
+              <input
+                type="text"
+                placeholder="Buscar parada..."
+                value={searchLocal}
+                onChange={(e) => setSearchLocal(e.target.value)}
+                style={{
+                  width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${t.border}`,
+                  background: t.bg, color: t.text, fontSize: 13, outline: 'none'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div>
+              {paradasFiltradas.map(p => (
+                <div
+                  key={p.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange(p.id);
+                    setShowDropdown(false);
+                    setSearchLocal('');
+                  }}
+                  style={{
+                    padding: '10px 14px', cursor: 'pointer', background: value === p.id ? t.bgHover : 'transparent',
+                    borderBottom: `1px solid ${t.border}`
+                  }}
+                >
+                  <div style={{ color: t.text, fontSize: 13, fontWeight: 600 }}>{p.nombre}</div>
+                  <div style={{ color: t.textMuted, fontSize: 11, marginTop: 2 }}>ID: {p.id} • Líneas: {p.lineas.join(', ')}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Vista del Planificador de Rutas
+  const RoutePlannerView = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Selectores de origen y destino */}
+      <div style={{ background: t.bgCard, borderRadius: 16, padding: 20, border: `1px solid ${t.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <MapIcon size={24} color={t.accent} />
+          <h2 style={{ margin: 0, color: t.text, fontSize: 18, fontWeight: 700 }}>Planificador de Rutas</h2>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <ParadaSelector
+            label="Origen"
+            value={origenId}
+            onChange={setOrigenId}
+            placeholder="Selecciona parada de origen"
+          />
+
+          <ParadaSelector
+            label="Destino"
+            value={destinoId}
+            onChange={setDestinoId}
+            placeholder="Selecciona parada de destino"
+          />
+
+          {/* Botón para usar ubicación actual */}
+          {userLocation && (
+            <button
+              onClick={() => {
+                const paradaCercana = paradasCercanas[0];
+                if (paradaCercana) setOrigenId(paradaCercana.id);
+              }}
+              style={{
+                background: t.accent, color: '#fff', border: 'none', borderRadius: 10, padding: '10px 14px',
+                fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center'
+              }}
+            >
+              <Locate size={16} />
+              Usar parada más cercana como origen
+            </button>
+          )}
+
+          {/* Botón intercambiar */}
+          {origenId && destinoId && (
+            <button
+              onClick={() => {
+                const temp = origenId;
+                setOrigenId(destinoId);
+                setDestinoId(temp);
+              }}
+              style={{
+                background: t.bgHover, color: t.text, border: `1px solid ${t.border}`, borderRadius: 10, padding: '10px 14px',
+                fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center'
+              }}
+            >
+              <RefreshCw size={16} />
+              Intercambiar origen y destino
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Mapa */}
+      {(origenId || destinoId) && <MapView rutas={rutasCalculadas} />}
+
+      {/* Resultados de rutas */}
+      {rutasCalculadas.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <h3 style={{ margin: 0, color: t.text, fontSize: 16, fontWeight: 700 }}>
+            {rutasCalculadas.length} {rutasCalculadas.length === 1 ? 'ruta encontrada' : 'rutas encontradas'}
+          </h3>
+
+          {rutasCalculadas.map((ruta, idx) => (
+            <div
+              key={idx}
+              onClick={() => setRutaSeleccionada(ruta)}
+              style={{
+                background: t.bgCard, borderRadius: 16, padding: 16, cursor: 'pointer',
+                border: `2px solid ${rutaSeleccionada === ruta ? t.accent : t.border}`
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {ruta.tipo === 'directa' ? (
+                    <Zap size={20} color={t.success} />
+                  ) : (
+                    <Navigation size={20} color={t.warning} />
+                  )}
+                  <span style={{ color: t.text, fontSize: 15, fontWeight: 600 }}>
+                    {ruta.tipo === 'directa' ? 'Ruta directa' : 'Con transbordo'}
+                  </span>
+                </div>
+                <div style={{ background: `${t.accent}20`, borderRadius: 10, padding: '6px 12px' }}>
+                  <span style={{ color: t.accent, fontWeight: 700, fontSize: 14 }}>{ruta.tiempoEstimado} min</span>
+                </div>
+              </div>
+
+              {ruta.segmentos.map((seg, sidx) => (
+                <div key={sidx} style={{ marginBottom: sidx < ruta.segmentos.length - 1 ? 10 : 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 8, background: seg.color,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <span style={{ color: '#fff', fontWeight: 800, fontSize: 12 }}>L{seg.linea}</span>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: t.text, fontSize: 13, fontWeight: 600 }}>{seg.nombre}</div>
+                      <div style={{ color: t.textMuted, fontSize: 12 }}>{seg.paradas} paradas</div>
+                    </div>
+                  </div>
+                  <div style={{ color: t.textMuted, fontSize: 12, marginLeft: 42 }}>
+                    {seg.desde} → {seg.hasta}
+                  </div>
+                  {sidx < ruta.segmentos.length - 1 && (
+                    <div style={{ marginLeft: 42, marginTop: 8, color: t.warning, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <RefreshCw size={12} />
+                      Transbordo en {ruta.paradas[sidx + 1].nombre}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {origenId && destinoId && rutasCalculadas.length === 0 && (
+        <div style={{ background: t.bgCard, borderRadius: 16, padding: 40, textAlign: 'center', border: `1px solid ${t.border}` }}>
+          <AlertTriangle size={48} color={t.warning} style={{ opacity: 0.5 }} />
+          <p style={{ color: t.text, marginTop: 16, fontSize: 15 }}>No se encontraron rutas disponibles</p>
+          <p style={{ color: t.textMuted, fontSize: 13, marginTop: 8 }}>
+            Intenta seleccionar otras paradas o verifica que existan líneas que conecten estos puntos.
+          </p>
+        </div>
+      )}
+
+      {!origenId && !destinoId && (
+        <div style={{ background: t.bgCard, borderRadius: 16, padding: 40, textAlign: 'center', border: `1px solid ${t.border}` }}>
+          <MapIcon size={48} color={t.accent} style={{ opacity: 0.5 }} />
+          <p style={{ color: t.text, marginTop: 16, fontSize: 15 }}>Selecciona origen y destino</p>
+          <p style={{ color: t.textMuted, fontSize: 13, marginTop: 8 }}>
+            Elige las paradas de origen y destino para calcular las mejores rutas disponibles.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
@@ -427,6 +837,7 @@ export default function App() {
             { id: 'cercanas', icon: Locate, label: 'Cercanas' },
             { id: 'favoritos', icon: Star, label: 'Favoritos' },
             { id: 'lineas', icon: Bus, label: 'Líneas' },
+            { id: 'rutas', icon: MapIcon, label: 'Rutas' },
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 11, border: 'none',
@@ -479,6 +890,8 @@ export default function App() {
         )}
 
         {activeTab === 'lineas' && <LineasView />}
+
+        {activeTab === 'rutas' && <RoutePlannerView />}
       </main>
 
       {selectedParada && <ParadaDetail />}
