@@ -75,11 +75,25 @@ public/icons/
 # Instalar dependencias
 npm install
 
-# Iniciar servidor de desarrollo
+# Iniciar servidor de desarrollo (incluye proxy API)
 npm run dev
 
-# Build para producción
-npm run build
+# Esto arranca:
+# - Vite en http://localhost:5173
+# - Proxy API en http://localhost:3001
+```
+
+**⚠️ Importante:** En desarrollo local, el proxy (`server.dev.js`) es necesario porque Vite no ejecuta las API routes de Vercel.
+
+### Alternativa: Solo Vite (sin API)
+```bash
+npm run dev:vite  # Solo frontend, las llamadas API fallarán
+```
+
+### Probar el proxy directamente
+```bash
+npm run dev:proxy
+# Luego: curl "http://localhost:3001/api/surbus?l=1&bs=7"
 ```
 
 ## ✨ Características

@@ -1,153 +1,90 @@
 // /api/surbus.js
-// Proxy para la API de Surbus Almería
-// Evita problemas de CORS y añade caché en edge
+// Proxy Edge para la API de Surbus Almería
+// Se ejecuta en el edge más cercano al usuario (Europa para usuarios españoles)
 
 export const config = {
-  runtime: 'edge', // Más rápido que serverless
+  runtime: 'edge',
+  regions: ['cdg1', 'fra1', 'lhr1'], // París, Frankfurt, Londres - cerca de España
 };
-
-const SURBUS_API = 'https://www.surbusalmeria.es/API';
-
-// Caché en memoria para reducir llamadas (en el edge)
-const cache = new Map();
-const CACHE_TTL = 20000; // 20 segundos
 
 export default async function handler(request) {
   const url = new URL(request.url);
-  
-  // Obtener parámetros
-  const action = url.searchParams.get('action') || 'waittime';
   const linea = url.searchParams.get('l');
   const parada = url.searchParams.get('bs');
-  
-  // Validar parámetros básicos
-  if (action === 'waittime' && (!linea || !parada)) {
+
+  // Headers CORS
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+
+  // Preflight
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
+  // Validar parámetros
+  if (!linea || !parada) {
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: 'Parámetros l (línea) y bs (parada) requeridos' 
-      }),
-      { 
-        status: 400,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        }
-      }
+      JSON.stringify({ success: false, error: 'Faltan parámetros l y bs' }),
+      { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
     );
   }
 
   try {
-    let apiUrl;
-    let cacheKey;
+    const apiUrl = `https://www.surbusalmeria.es/API/GetWaitTime?l=${linea}&bs=${parada}`;
     
-    switch (action) {
-      case 'waittime':
-        apiUrl = `${SURBUS_API}/GetWaitTime?l=${linea}&bs=${parada}`;
-        cacheKey = `wt-${linea}-${parada}`;
-        break;
-      
-      case 'lines':
-        apiUrl = `${SURBUS_API}/GetLines`;
-        cacheKey = 'lines';
-        break;
-        
-      case 'stops':
-        apiUrl = `${SURBUS_API}/GetStops${linea ? `?l=${linea}` : ''}`;
-        cacheKey = `stops-${linea || 'all'}`;
-        break;
-        
-      default:
-        apiUrl = `${SURBUS_API}/GetWaitTime?l=${linea}&bs=${parada}`;
-        cacheKey = `wt-${linea}-${parada}`;
-    }
-
-    // Verificar caché
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return new Response(
-        JSON.stringify({ ...cached.data, cached: true }),
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'X-Cache': 'HIT',
-            'Cache-Control': 'public, s-maxage=20, stale-while-revalidate=40'
-          }
-        }
-      );
-    }
-
-    // Hacer petición a Surbus
+    // Simular un navegador español real
     const response = await fetch(apiUrl, {
+      method: 'GET',
       headers: {
-        'User-Agent': 'SurbusPlus/2.0',
-        'Accept': 'application/json',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://www.surbusalmeria.es/tiempos-de-espera',
+        'Origin': 'https://www.surbusalmeria.es',
+        'X-Requested-With': 'XMLHttpRequest',
       },
     });
 
     if (!response.ok) {
-      throw new Error(`Surbus API error: ${response.status}`);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: `Surbus API error: ${response.status}`,
+          region: 'edge'
+        }),
+        { 
+          status: 502, 
+          headers: { 'Content-Type': 'application/json', ...corsHeaders } 
+        }
+      );
     }
 
     const data = await response.json();
-    
-    // Guardar en caché
-    cache.set(cacheKey, {
-      data,
-      timestamp: Date.now()
-    });
-
-    // Limpiar caché vieja (máx 1000 entradas)
-    if (cache.size > 1000) {
-      const oldest = [...cache.entries()]
-        .sort((a, b) => a[1].timestamp - b[1].timestamp)
-        .slice(0, 100);
-      oldest.forEach(([key]) => cache.delete(key));
-    }
 
     return new Response(
       JSON.stringify(data),
       {
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'X-Cache': 'MISS',
-          'Cache-Control': 'public, s-maxage=20, stale-while-revalidate=40'
-        }
+          'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=30',
+          ...corsHeaders
+        },
       }
     );
 
   } catch (error) {
-    console.error('Surbus proxy error:', error);
-    
-    // Si hay caché expirada, devolverla como fallback
-    const staleCache = cache.get(`wt-${linea}-${parada}`);
-    if (staleCache) {
-      return new Response(
-        JSON.stringify({ ...staleCache.data, stale: true }),
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'X-Cache': 'STALE',
-          }
-        }
-      );
-    }
-
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: 'Error conectando con Surbus',
-        details: error.message 
+        error: error.message,
+        region: 'edge'
       }),
       { 
-        status: 502,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        }
+        status: 500, 
+        headers: { 'Content-Type': 'application/json', ...corsHeaders } 
       }
     );
   }

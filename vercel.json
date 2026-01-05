@@ -2,6 +2,12 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "regions": ["cdg1"],
+  "functions": {
+    "api/surbus.js": {
+      "maxDuration": 10
+    }
+  },
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
@@ -22,7 +28,7 @@
     {
       "source": "/api/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, s-maxage=30, stale-while-revalidate=60" }
+        { "key": "Cache-Control", "value": "public, s-maxage=15, stale-while-revalidate=30" }
       ]
     }
   ]

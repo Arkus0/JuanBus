@@ -146,9 +146,9 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      // Proxy para desarrollo local
+      // Proxy para desarrollo local - redirige a server.dev.js
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3001',
         changeOrigin: true,
       },
     },
