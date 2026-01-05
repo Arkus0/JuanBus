@@ -165,12 +165,27 @@ export default function App() {
   const paradasFiltradas = useMemo(() => {
     const src = activeTab === 'cercanas' ? paradasCercanas : PARADAS;
     if (!searchTerm) return src;
-    const term = searchTerm.toLowerCase();
-    return src.filter(p => 
-      p.nombre.toLowerCase().includes(term) || 
-      p.id.toString().includes(term) ||
-      p.lineas.some(l => `l${l}`.includes(term))
-    );
+
+    // Normalizar texto: eliminar acentos y convertir a minúsculas
+    const normalize = (str) => str
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+    // Dividir el término de búsqueda en palabras
+    const searchWords = normalize(searchTerm).split(/\s+/).filter(w => w.length > 0);
+
+    return src.filter(p => {
+      const normalizedName = normalize(p.nombre);
+      const normalizedId = p.id.toString();
+
+      // Verificar si todas las palabras de búsqueda están en el nombre o ID
+      return searchWords.every(word =>
+        normalizedName.includes(word) ||
+        normalizedId.includes(word) ||
+        p.lineas.some(l => `l${l}`.includes(word))
+      );
+    });
   }, [searchTerm, paradasCercanas, activeTab]);
 
   // Cargar tiempos
