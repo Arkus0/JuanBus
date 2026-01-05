@@ -511,11 +511,17 @@ export default function App() {
   // Mapa genérico para Cercanas, Favoritos y Líneas
   const GeneralMapView = ({ paradas, lineaId = null }) => {
     const center = userLocation || (paradas.length > 0 ? { lat: paradas[0].lat, lng: paradas[0].lng } : { lat: 36.84, lng: -2.46 });
-    const linea = lineaId ? getLinea(lineaId) : null;
+    // Key único para evitar re-inicialización del mapa al seleccionar paradas
+    const mapKey = `${activeTab}-${viewMode}-${lineaId || 'general'}`;
 
     return (
       <div style={{ height: 500, borderRadius: 16, overflow: 'hidden', border: `1px solid ${t.border}`, marginBottom: 16 }}>
-        <MapContainer center={[center.lat, center.lng]} zoom={13} style={{ height: '100%', width: '100%' }}>
+        <MapContainer
+          key={mapKey}
+          center={[center.lat, center.lng]}
+          zoom={13}
+          style={{ height: '100%', width: '100%' }}
+        >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -547,16 +553,6 @@ export default function App() {
               </Popup>
             </Marker>
           ))}
-
-          {/* Polyline para líneas seleccionadas */}
-          {lineaId && linea && (
-            <Polyline
-              positions={paradas.map(p => [p.lat, p.lng])}
-              color={linea.color}
-              weight={4}
-              opacity={0.7}
-            />
-          )}
         </MapContainer>
       </div>
     );
