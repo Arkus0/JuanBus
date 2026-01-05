@@ -3,7 +3,7 @@ import {
   MapPin, Bus, Clock, Star, Search, Moon, Sun, Navigation, AlertTriangle,
   RefreshCw, ChevronRight, X, Heart, Map as MapIcon, Bell, BellOff, Share2,
   History, Settings, Locate, ChevronDown, Filter, Zap, Info,
-  ExternalLink, Wifi, WifiOff, Download, Check, CloudOff
+  ExternalLink, Wifi, WifiOff, Download, Check, CloudOff, List
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -246,6 +246,9 @@ export default function App() {
   const [destinoId, setDestinoId] = useState(null);
   const [rutasCalculadas, setRutasCalculadas] = useState([]);
   const [rutaSeleccionada, setRutaSeleccionada] = useState(null);
+
+  // Estado de vista (lista o mapa)
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
 
   // Tema
   const t = darkMode ? {
@@ -505,7 +508,61 @@ export default function App() {
     </div>
   );
 
-  // Componente de Mapa
+  // Mapa genérico para Cercanas, Favoritos y Líneas
+  const GeneralMapView = ({ paradas, lineaId = null }) => {
+    const center = userLocation || (paradas.length > 0 ? { lat: paradas[0].lat, lng: paradas[0].lng } : { lat: 36.84, lng: -2.46 });
+    const linea = lineaId ? getLinea(lineaId) : null;
+
+    return (
+      <div style={{ height: 500, borderRadius: 16, overflow: 'hidden', border: `1px solid ${t.border}`, marginBottom: 16 }}>
+        <MapContainer center={[center.lat, center.lng]} zoom={13} style={{ height: '100%', width: '100%' }}>
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+
+          {/* Ubicación del usuario */}
+          {userLocation && (
+            <Marker position={[userLocation.lat, userLocation.lng]}>
+              <Popup>
+                <strong>Tu ubicación</strong>
+              </Popup>
+            </Marker>
+          )}
+
+          {/* Marcadores de paradas */}
+          {paradas.map((parada) => (
+            <Marker
+              key={parada.id}
+              position={[parada.lat, parada.lng]}
+              eventHandlers={{
+                click: () => setSelectedParada(parada)
+              }}
+            >
+              <Popup>
+                <strong>{parada.nombre}</strong><br/>
+                ID: {parada.id}<br/>
+                Líneas: {parada.lineas.join(', ')}
+                {parada.distancia && <><br/>Distancia: {formatDistance(parada.distancia)}</>}
+              </Popup>
+            </Marker>
+          ))}
+
+          {/* Polyline para líneas seleccionadas */}
+          {lineaId && linea && (
+            <Polyline
+              positions={paradas.map(p => [p.lat, p.lng])}
+              color={linea.color}
+              weight={4}
+              opacity={0.7}
+            />
+          )}
+        </MapContainer>
+      </div>
+    );
+  };
+
+  // Componente de Mapa del Planificador de Rutas
   const MapView = ({ rutas }) => {
     const center = userLocation || { lat: 36.84, lng: -2.46 }; // Centro de Almería por defecto
 
@@ -853,6 +910,36 @@ export default function App() {
           ))}
         </div>
 
+        {/* Toggle Vista Lista/Mapa */}
+        {activeTab !== 'rutas' && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 16, justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => setViewMode('list')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10,
+                border: `1px solid ${t.border}`, background: viewMode === 'list' ? t.accent : t.bgCard,
+                color: viewMode === 'list' ? '#fff' : t.textMuted, fontWeight: 600, fontSize: 12,
+                cursor: 'pointer'
+              }}
+            >
+              <List size={16} />
+              Lista
+            </button>
+            <button
+              onClick={() => setViewMode('map')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10,
+                border: `1px solid ${t.border}`, background: viewMode === 'map' ? t.accent : t.bgCard,
+                color: viewMode === 'map' ? '#fff' : t.textMuted, fontWeight: 600, fontSize: 12,
+                cursor: 'pointer'
+              }}
+            >
+              <MapIcon size={16} />
+              Mapa
+            </button>
+          </div>
+        )}
+
         {/* Content */}
         {activeTab === 'cercanas' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -867,11 +954,13 @@ export default function App() {
                 <Locate size={32} style={{ animation: 'spin 2s linear infinite' }} />
                 <p style={{ marginTop: 12 }}>Obteniendo ubicación...</p>
               </div>
-            ) : (
+            ) : viewMode === 'list' ? (
               <>
                 <p style={{ color: t.textMuted, fontSize: 13, margin: '0 0 4px' }}>{paradasFiltradas.length} paradas</p>
                 {paradasFiltradas.slice(0, 50).map(p => <ParadaCard key={p.id} parada={p} />)}
               </>
+            ) : (
+              <GeneralMapView paradas={paradasFiltradas.slice(0, 100)} />
             )}
           </div>
         )}
@@ -883,13 +972,39 @@ export default function App() {
                 <Heart size={48} strokeWidth={1} style={{ opacity: 0.5 }} />
                 <p style={{ marginTop: 16 }}>No tienes favoritos</p>
               </div>
-            ) : (
+            ) : viewMode === 'list' ? (
               PARADAS.filter(p => favoritos.includes(p.id)).map(p => <ParadaCard key={p.id} parada={p} />)
+            ) : (
+              <GeneralMapView paradas={PARADAS.filter(p => favoritos.includes(p.id))} />
             )}
           </div>
         )}
 
-        {activeTab === 'lineas' && <LineasView />}
+        {activeTab === 'lineas' && (viewMode === 'list' ? <LineasView /> : (
+          selectedLinea ? (
+            <GeneralMapView
+              paradas={PARADAS.filter(p => p.lineas.includes(selectedLinea))}
+              lineaId={selectedLinea}
+            />
+          ) : (
+            <div style={{ background: t.bgCard, borderRadius: 16, padding: 40, textAlign: 'center', border: `1px solid ${t.border}` }}>
+              <MapIcon size={48} color={t.accent} style={{ opacity: 0.5 }} />
+              <p style={{ color: t.text, marginTop: 16, fontSize: 15 }}>Selecciona una línea</p>
+              <p style={{ color: t.textMuted, fontSize: 13, marginTop: 8 }}>
+                Cambia a vista de lista para seleccionar una línea y ver su recorrido en el mapa.
+              </p>
+              <button
+                onClick={() => setViewMode('list')}
+                style={{
+                  marginTop: 16, background: t.accent, color: '#fff', border: 'none', borderRadius: 10,
+                  padding: '10px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Ir a vista de lista
+              </button>
+            </div>
+          )
+        ))}
 
         {activeTab === 'rutas' && <RoutePlannerView />}
       </main>
