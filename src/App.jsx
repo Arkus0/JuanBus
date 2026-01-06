@@ -960,6 +960,69 @@ export default function App() {
     const [isMapExpanded, setIsMapExpanded] = useState(false);
     const center = origenCoords || destinoCoords || userLocation || { lat: 36.84, lng: -2.46 };
 
+    // Iconos personalizados para origen y destino
+    const origenIcon = L.divIcon({
+      className: 'origen-marker',
+      html: `
+        <div style="
+          width: 24px;
+          height: 24px;
+          background: #4CAF50;
+          border: 3px solid #fff;
+          border-radius: 50%;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          position: relative;
+          left: -12px;
+          top: -12px;
+        "></div>
+      `,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+
+    const destinoIcon = L.divIcon({
+      className: 'destino-marker',
+      html: `
+        <div style="
+          width: 24px;
+          height: 24px;
+          background: #F44336;
+          border: 3px solid #fff;
+          border-radius: 50%;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          position: relative;
+          left: -12px;
+          top: -12px;
+        "></div>
+      `,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+
+    const paradaIntermedioIcon = L.divIcon({
+      className: 'parada-intermedia-marker',
+      html: `
+        <div style="
+          width: 12px;
+          height: 12px;
+          background: #2196F3;
+          border: 2px solid #fff;
+          border-radius: 50%;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+          position: relative;
+          left: -6px;
+          top: -6px;
+        "></div>
+      `,
+      iconSize: [12, 12],
+      iconAnchor: [6, 6]
+    });
+
+    // Si no hay ruta seleccionada pero hay rutas, usar la primera
+    const rutaMostrar = rutaSeleccionada !== null && rutas[rutaSeleccionada]
+      ? rutas[rutaSeleccionada]
+      : (rutas.length > 0 ? rutas[0] : null);
+
     return (
       <div style={{ marginBottom: 16 }}>
         <button
@@ -981,7 +1044,7 @@ export default function App() {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <MapIcon size={18} color={t.accent} />
-            Ver mapa de ruta
+            Ver mapa de ruta {rutaMostrar && `(${rutaMostrar.tipo === 'directa' ? 'directa' : 'con transbordo'})`}
           </div>
           <ChevronDown
             size={18}
@@ -1005,34 +1068,78 @@ export default function App() {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          {/* Marcadores de origen y destino */}
+          {/* Líneas de caminar desde origen a primera parada y desde última parada a destino */}
+          {rutaMostrar && rutaMostrar.paradas.length > 0 && (
+            <>
+              {/* Línea punteada desde origen a primera parada */}
+              {origenCoords && (
+                <Polyline
+                  positions={[
+                    [origenCoords.lat, origenCoords.lng],
+                    [rutaMostrar.paradas[0].lat, rutaMostrar.paradas[0].lng]
+                  ]}
+                  color="#666"
+                  weight={2}
+                  opacity={0.6}
+                  dashArray="5, 10"
+                />
+              )}
+
+              {/* Línea del bus conectando paradas */}
+              <Polyline
+                positions={rutaMostrar.paradas.map(p => [p.lat, p.lng])}
+                color={rutaMostrar.lineas.length > 0 ? getLinea(rutaMostrar.lineas[0]).color : t.accent}
+                weight={5}
+                opacity={0.8}
+              />
+
+              {/* Línea punteada desde última parada a destino */}
+              {destinoCoords && (
+                <Polyline
+                  positions={[
+                    [rutaMostrar.paradas[rutaMostrar.paradas.length - 1].lat, rutaMostrar.paradas[rutaMostrar.paradas.length - 1].lng],
+                    [destinoCoords.lat, destinoCoords.lng]
+                  ]}
+                  color="#666"
+                  weight={2}
+                  opacity={0.6}
+                  dashArray="5, 10"
+                />
+              )}
+
+              {/* Marcadores de paradas intermedias */}
+              {rutaMostrar.paradas.map((parada, idx) => (
+                <Marker
+                  key={idx}
+                  position={[parada.lat, parada.lng]}
+                  icon={paradaIntermedioIcon}
+                >
+                  <Popup>
+                    <strong>{parada.nombre}</strong><br/>
+                    Línea {rutaMostrar.lineas[0]}
+                  </Popup>
+                </Marker>
+              ))}
+            </>
+          )}
+
+          {/* Marcadores de origen y destino (por encima de todo) */}
           {origenCoords && (
-            <Marker position={[origenCoords.lat, origenCoords.lng]}>
-              <Popup><strong>Origen:</strong> {origenCoords.nombre}</Popup>
+            <Marker
+              position={[origenCoords.lat, origenCoords.lng]}
+              icon={origenIcon}
+            >
+              <Popup><strong>🟢 Origen</strong><br/>{origenCoords.nombre}</Popup>
             </Marker>
           )}
 
           {destinoCoords && (
-            <Marker position={[destinoCoords.lat, destinoCoords.lng]}>
-              <Popup><strong>Destino:</strong> {destinoCoords.nombre}</Popup>
+            <Marker
+              position={[destinoCoords.lat, destinoCoords.lng]}
+              icon={destinoIcon}
+            >
+              <Popup><strong>🔴 Destino</strong><br/>{destinoCoords.nombre}</Popup>
             </Marker>
-          )}
-
-          {/* Trazar ruta seleccionada */}
-          {rutaSeleccionada && rutaSeleccionada.paradas.length > 0 && (
-            <>
-              {rutaSeleccionada.paradas.map((parada, idx) => (
-                <Marker key={idx} position={[parada.lat, parada.lng]}>
-                  <Popup>{parada.nombre}</Popup>
-                </Marker>
-              ))}
-              <Polyline
-                positions={rutaSeleccionada.paradas.map(p => [p.lat, p.lng])}
-                color={rutaSeleccionada.lineas.length > 0 ? getLinea(rutaSeleccionada.lineas[0]).color : t.accent}
-                weight={4}
-                opacity={0.7}
-              />
-            </>
           )}
             </MapContainer>
           </div>
@@ -1210,10 +1317,13 @@ export default function App() {
 
     // Cargar tiempos automáticamente cuando se expande o cambia la parada
     useEffect(() => {
-      if (isExpanded && parada && isOnline) {
-        loadTiempos(parada);
+      if (isExpanded && paradaId && isOnline) {
+        const paradaActual = PARADAS.find(p => p.id === paradaId);
+        if (paradaActual) {
+          loadTiempos(paradaActual);
+        }
       }
-    }, [isExpanded, parada, isOnline]);
+    }, [isExpanded, paradaId, isOnline, loadTiempos]);
 
     // No mostrar el widget si no hay parada configurada
     if (!parada) return null;
