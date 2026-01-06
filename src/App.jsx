@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import Fuse from 'fuse.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DATOS DE SURBUS ALMERÍA
@@ -32,6 +33,55 @@ const LINEAS = [
   { id: 30, nombre: "Almería - Aeropuerto", color: "#96CEB4", descripcion: "Conexión aeropuerto" },
   { id: 31, nombre: "Retamar directo", color: "#FFEAA7", descripcion: "Express a Retamar" }
 ];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SINÓNIMOS Y PUNTOS DE INTERÉS (POI)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Diccionario de sinónimos y POIs → IDs de paradas relacionadas
+const SINONIMOS_POI = {
+  // Hospitales y centros médicos
+  'hospital': [22, 21, 332, 333], // Torrecárdenas, Materno, El Toyo
+  'torrecardenas': [22, 21, 426], // Hospital + parking
+  'materno': [21],
+  'toyo': [332, 333],
+
+  // Universidad y centros educativos
+  'universidad': [144, 482], // Universidad
+  'uni': [144, 482],
+  'campus': [144],
+
+  // Transporte
+  'estacion': [292], // Estación Intermodal
+  'intermodal': [292],
+  'aeropuerto': [188],
+  'aena': [188],
+
+  // Comercio
+  'ikea': [18],
+  'carrefour': [56],
+  'mediterraneo': [61, 67], // Centro Comercial Mediterráneo
+
+  // Zonas y barrios
+  'centro': [292, 420], // Centro ciudad
+  'rambla': [80, 478],
+  'zapillo': [165],
+  'retamar': [192, 193, 195, 196],
+  'alquian': [194, 195, 268, 457, 458],
+  'nueva almeria': [138, 149, 150],
+
+  // Deportes y ocio
+  'estadio': [37, 320, 23, 385, 388], // Varios estadios
+  'auditorio': [136, 152],
+  'playa': [149, 443],
+  'parque': [56, 57, 162],
+
+  // Otros POIs
+  'cementerio': [17],
+  'alcazaba': [409],
+  'cable ingles': [294, 318],
+  'palmeral': [135, 164]
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // UTILIDADES
@@ -414,25 +464,74 @@ export default function App() {
     })).sort((a, b) => a.distancia - b.distancia);
   }, [userLocation]);
 
+  // Búsqueda mejorada con Fuse.js, sinónimos y contexto
   const paradasFiltradas = useMemo(() => {
     const src = activeTab === 'cercanas' ? paradasCercanas : PARADAS;
     if (!deferredSearchTerm) return src;
 
-    // Dividir el término de búsqueda en palabras (normalizar una sola vez)
-    const searchWords = normalizeText(deferredSearchTerm).split(/\s+/).filter(w => w.length > 0);
+    const searchTermNormalized = normalizeText(deferredSearchTerm);
+    let resultados = [];
 
-    return src.filter(p => {
-      const normalizedName = normalizeText(p.nombre);
-      const normalizedId = p.id.toString();
-
-      // Verificar si todas las palabras de búsqueda están en el nombre o ID
-      return searchWords.every(word =>
-        normalizedName.includes(word) ||
-        normalizedId.includes(word) ||
-        p.lineas.some(l => `l${l}`.includes(word))
-      );
+    // 1. Buscar por sinónimos/POI
+    const paradasPOI = [];
+    Object.entries(SINONIMOS_POI).forEach(([sinonimo, paradaIds]) => {
+      if (searchTermNormalized.includes(sinonimo) || sinonimo.includes(searchTermNormalized)) {
+        paradaIds.forEach(id => {
+          const parada = src.find(p => p.id === id);
+          if (parada && !paradasPOI.find(p => p.id === id)) {
+            paradasPOI.push(parada);
+          }
+        });
+      }
     });
-  }, [deferredSearchTerm, paradasCercanas, activeTab]);
+
+    // 2. Búsqueda fuzzy con Fuse.js
+    const fuse = new Fuse(src, {
+      keys: [
+        { name: 'nombre', weight: 0.7 },
+        { name: 'id', weight: 0.2 },
+        { name: 'lineas', weight: 0.1 }
+      ],
+      threshold: 0.4, // 0 = exacto, 1 = cualquier cosa
+      distance: 100,
+      ignoreLocation: true,
+      getFn: (obj, path) => {
+        if (path === 'nombre') return normalizeText(obj.nombre);
+        if (path === 'id') return obj.id.toString();
+        if (path === 'lineas') return obj.lineas.map(l => `l${l}`).join(' ');
+        return '';
+      }
+    });
+
+    const fuseResults = fuse.search(searchTermNormalized).map(r => r.item);
+
+    // 3. Combinar resultados (POI primero, luego fuzzy, sin duplicados)
+    const seen = new Set();
+    [...paradasPOI, ...fuseResults].forEach(parada => {
+      if (!seen.has(parada.id)) {
+        seen.add(parada.id);
+        resultados.push(parada);
+      }
+    });
+
+    // 4. Búsqueda contextual: ordenar por relevancia
+    if (activeTab === 'cercanas' && userLocation) {
+      // En Cercanas: priorizar por distancia
+      resultados.sort((a, b) => (a.distancia || 0) - (b.distancia || 0));
+    } else if (selectedLinea) {
+      // En vista de línea: priorizar paradas de esa línea
+      resultados.sort((a, b) => {
+        const aHasLinea = a.lineas.includes(selectedLinea) ? 0 : 1;
+        const bHasLinea = b.lineas.includes(selectedLinea) ? 0 : 1;
+        return aHasLinea - bHasLinea;
+      });
+    } else {
+      // General: priorizar por número de líneas (más opciones)
+      resultados.sort((a, b) => b.lineas.length - a.lineas.length);
+    }
+
+    return resultados;
+  }, [deferredSearchTerm, paradasCercanas, activeTab, userLocation, selectedLinea]);
 
   // Cargar tiempos con límite de caché
   const loadTiempos = useCallback(async (parada) => {
