@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import Fuse from 'fuse.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DATOS DE SURBUS ALMERÍA
@@ -464,77 +463,53 @@ export default function App() {
     })).sort((a, b) => a.distancia - b.distancia);
   }, [userLocation]);
 
-  // Búsqueda mejorada con Fuse.js, sinónimos y contexto
+  // Búsqueda simple y efectiva (sin Fuse.js - causaba problemas)
   const paradasFiltradas = useMemo(() => {
     const src = activeTab === 'cercanas' ? paradasCercanas : PARADAS;
     if (!deferredSearchTerm) return src;
 
     const searchTermNormalized = normalizeText(deferredSearchTerm);
     const searchWords = searchTermNormalized.split(/\s+/).filter(w => w.length > 0);
-    let resultados = [];
+    const resultadosMap = new Map();
 
-    // 1. Buscar por sinónimos/POI primero
-    const paradasPOI = [];
+    // 1. Buscar por sinónimos/POI
     searchWords.forEach(word => {
       Object.entries(SINONIMOS_POI).forEach(([sinonimo, paradaIds]) => {
         if (word.includes(sinonimo) || sinonimo.includes(word)) {
           paradaIds.forEach(id => {
             const parada = src.find(p => p.id === id);
-            if (parada && !paradasPOI.find(p => p.id === id)) {
-              paradasPOI.push(parada);
+            if (parada) {
+              resultadosMap.set(parada.id, parada);
             }
           });
         }
       });
     });
 
-    // 2. Configurar Fuse.js para búsqueda fuzzy
-    const fuse = new Fuse(src, {
-      keys: ['nombre', 'id'],
-      threshold: 0.3, // Más estricto para evitar falsos positivos
-      distance: 100,
-      ignoreLocation: true,
-      minMatchCharLength: 3,
-      getFn: (obj, path) => {
-        if (path === 'nombre') return normalizeText(obj.nombre);
-        if (path === 'id') return obj.id.toString();
-        return '';
-      }
-    });
+    // 2. Búsqueda directa: cada palabra debe aparecer en alguna parte
+    src.forEach(parada => {
+      if (resultadosMap.has(parada.id)) return; // Ya encontrada por POI
 
-    // 3. Buscar con cada palabra individualmente
-    const fuseResultsMap = new Map();
-    searchWords.forEach(word => {
-      const results = fuse.search(word);
-      results.forEach(result => {
-        fuseResultsMap.set(result.item.id, result.item);
-      });
-    });
-
-    // 4. Filtrar resultados: debe coincidir ALGUNA palabra (no todas)
-    const fuseResults = Array.from(fuseResultsMap.values()).filter(parada => {
       const nombreNorm = normalizeText(parada.nombre);
       const idStr = parada.id.toString();
       const lineasStr = parada.lineas.map(l => `l${l}`).join(' ');
 
-      // Al menos una palabra debe coincidir
-      return searchWords.some(word =>
+      // Si ALGUNA palabra coincide, incluir
+      const coincide = searchWords.some(word =>
         nombreNorm.includes(word) ||
         idStr.includes(word) ||
         lineasStr.includes(word)
       );
-    });
 
-    // 5. Combinar resultados (POI primero, luego fuzzy, sin duplicados)
-    const seen = new Set();
-    [...paradasPOI, ...fuseResults].forEach(parada => {
-      if (!seen.has(parada.id)) {
-        seen.add(parada.id);
-        resultados.push(parada);
+      if (coincide) {
+        resultadosMap.set(parada.id, parada);
       }
     });
 
-    // 6. Búsqueda contextual: ordenar por relevancia
+    // 3. Convertir a array
+    let resultados = Array.from(resultadosMap.values());
+
+    // 4. Ordenar por contexto
     if (activeTab === 'cercanas' && userLocation) {
       // En Cercanas: priorizar por distancia
       resultados.sort((a, b) => (a.distancia || 0) - (b.distancia || 0));
