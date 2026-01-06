@@ -495,9 +495,17 @@ export default function App() {
     }
   }, [origenCoords, destinoCoords]);
 
-  const toggleFavorito = (id) => setFavoritos(prev =>
-    prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-  );
+  const toggleFavorito = (id) => {
+    setFavoritos(prev => {
+      const isRemoving = prev.includes(id);
+      // Si se está quitando de favoritos, también limpiar casa/trabajo
+      if (isRemoving) {
+        if (casaParadaId === id) setCasaParadaId(null);
+        if (trabajoParadaId === id) setTrabajoParadaId(null);
+      }
+      return isRemoving ? prev.filter(x => x !== id) : [...prev, id];
+    });
+  };
 
   const formatTiempo = (tiempo) => {
     if (!tiempo?.success) return { text: 'Sin datos', color: t.textMuted };
