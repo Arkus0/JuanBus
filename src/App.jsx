@@ -1200,6 +1200,22 @@ export default function App() {
                 border: `2px solid ${rutaSeleccionada === idx ? t.accent : t.border}` // Comparar por índice
               }}
             >
+              {/* Badge "Recomendada" para la primera ruta */}
+              {idx === 0 && (
+                <div style={{
+                  display: 'inline-block',
+                  background: t.accent,
+                  color: '#fff',
+                  padding: '4px 10px',
+                  borderRadius: 8,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  marginBottom: 10
+                }}>
+                  ⚡ Recomendada
+                </div>
+              )}
+
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {ruta.tipo === 'directa' ? (
@@ -1211,16 +1227,12 @@ export default function App() {
                     {ruta.detalles}
                   </span>
                 </div>
-                <div style={{ background: `${t.accent}20`, borderRadius: 10, padding: '6px 12px' }}>
-                  <span style={{ color: t.accent, fontWeight: 700, fontSize: 14 }}>{ruta.tiempoEstimado} min</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <MapPin size={16} color={t.textMuted} />
+                  <span style={{ color: t.text, fontWeight: 600, fontSize: 14 }}>
+                    {formatDistance(ruta.distanciaAndando)}
+                  </span>
                 </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                <MapPin size={14} color={t.textMuted} />
-                <span style={{ color: t.textMuted, fontSize: 12 }}>
-                  Andando: {formatDistance(ruta.distanciaAndando)}
-                </span>
               </div>
 
               {ruta.segmentos.map((seg, sidx) => (
