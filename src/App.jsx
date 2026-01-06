@@ -723,8 +723,8 @@ export default function App() {
 
   // Mapa genérico para Cercanas, Favoritos y Líneas
   const GeneralMapView = ({ paradas, lineaId = null }) => {
-    // En Cercanas el mapa expandido por defecto, en el resto colapsado
-    const [isMapExpanded, setIsMapExpanded] = useState(activeTab === 'cercanas');
+    // Mapa colapsado por defecto en todas las vistas
+    const [isMapExpanded, setIsMapExpanded] = useState(false);
     // Centro inicial solo la primera vez, no en cada render
     const [initialCenter] = useState(() =>
       userLocation || (paradas.length > 0 ? { lat: paradas[0].lat, lng: paradas[0].lng } : { lat: 36.84, lng: -2.46 })
@@ -1044,8 +1044,8 @@ export default function App() {
             rutaCalculada = rutas[0]; // Primera ruta (recomendada)
             // Extraer parada origen de la ruta
             const primeraParada = rutaCalculada.paradas?.[0];
-            if (primeraParada) {
-              paradaId = primeraParada;
+            if (primeraParada && primeraParada.id) {
+              paradaId = primeraParada.id; // Usar el ID, no el objeto completo
               esRutaDinamica = true;
             }
           }
