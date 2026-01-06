@@ -1035,53 +1035,66 @@ export default function App() {
     const hour = currentTime.getHours();
     const isGoingToWork = hour >= 6 && hour < 11;
 
-    // Lógica inteligente para obtener la parada relevante
-    let paradaId = null;
-    let rutaCalculada = null;
-    let esRutaDinamica = false;
+    // Lógica inteligente para obtener la parada relevante (usar useMemo para evitar recálculo)
+    const { paradaId, rutaCalculada, esRutaDinamica } = useMemo(() => {
+      let pId = null;
+      let ruta = null;
+      let dinamica = false;
 
-    if (isGoingToWork) {
-      // "Al curro" → mostrar tiempos de parada CASA (coges bus en casa)
-      paradaId = casaParadaId;
-    } else {
-      // "A casa" → lógica inteligente
-      const paradaTrabajo = trabajoParadaId ? PARADAS.find(p => p.id === trabajoParadaId) : null;
-      const paradaCasa = casaParadaId ? PARADAS.find(p => p.id === casaParadaId) : null;
+      if (isGoingToWork) {
+        // "Al curro" → mostrar tiempos de parada CASA (coges bus en casa)
+        pId = casaParadaId;
+      } else {
+        // "A casa" → lógica inteligente
+        const paradaTrabajo = trabajoParadaId ? PARADAS.find(p => p.id === trabajoParadaId) : null;
+        const paradaCasa = casaParadaId ? PARADAS.find(p => p.id === casaParadaId) : null;
 
-      if (paradaTrabajo && userLocation && paradaCasa) {
-        // Calcular distancia al trabajo
-        const distanciaTrabajo = haversineDistance(
-          userLocation.lat, userLocation.lng,
-          paradaTrabajo.lat, paradaTrabajo.lng
-        );
-
-        if (distanciaTrabajo < 500) {
-          // Estás cerca del trabajo → mostrar tiempos de parada TRABAJO
-          paradaId = trabajoParadaId;
-        } else {
-          // Estás lejos del trabajo → calcular ruta a casa
-          const rutas = calcularRutas(
-            userLocation,
-            { lat: paradaCasa.lat, lng: paradaCasa.lng }
+        if (paradaTrabajo && userLocation && paradaCasa) {
+          // Calcular distancia al trabajo
+          const distanciaTrabajo = haversineDistance(
+            userLocation.lat, userLocation.lng,
+            paradaTrabajo.lat, paradaTrabajo.lng
           );
 
-          if (rutas.length > 0) {
-            rutaCalculada = rutas[0]; // Primera ruta (recomendada)
-            // Extraer parada origen de la ruta
-            const primeraParada = rutaCalculada.paradas?.[0];
-            if (primeraParada && primeraParada.id) {
-              paradaId = primeraParada.id; // Usar el ID, no el objeto completo
-              esRutaDinamica = true;
+          if (distanciaTrabajo < 500) {
+            // Estás cerca del trabajo → mostrar tiempos de parada TRABAJO
+            pId = trabajoParadaId;
+          } else {
+            // Estás lejos del trabajo → calcular ruta a casa
+            const rutas = calcularRutas(
+              userLocation,
+              { lat: paradaCasa.lat, lng: paradaCasa.lng }
+            );
+
+            if (rutas.length > 0) {
+              ruta = rutas[0]; // Primera ruta (recomendada)
+              // Extraer parada origen de la ruta
+              const primeraParada = ruta.paradas?.[0];
+              if (primeraParada && primeraParada.id) {
+                pId = primeraParada.id; // Usar el ID, no el objeto completo
+                dinamica = true;
+              }
             }
           }
+        } else {
+          // Fallback: mostrar parada trabajo si existe
+          pId = trabajoParadaId;
         }
-      } else {
-        // Fallback: mostrar parada trabajo si existe
-        paradaId = trabajoParadaId;
       }
-    }
 
-    const parada = paradaId ? PARADAS.find(p => p.id === paradaId) : null;
+      return { paradaId: pId, rutaCalculada: ruta, esRutaDinamica: dinamica };
+    }, [isGoingToWork, casaParadaId, trabajoParadaId, userLocation]);
+
+    const parada = useMemo(() =>
+      paradaId ? PARADAS.find(p => p.id === paradaId) : null
+    , [paradaId]);
+
+    // Cargar tiempos automáticamente cuando se expande o cambia la parada
+    useEffect(() => {
+      if (isExpanded && parada && isOnline) {
+        loadTiempos(parada);
+      }
+    }, [isExpanded, parada, isOnline]);
 
     // No mostrar el widget si no hay parada configurada
     if (!parada) return null;
@@ -1091,7 +1104,7 @@ export default function App() {
     const tiemposParada = lineasParada.map(lineaId => ({
       lineaId,
       linea: getLinea(lineaId),
-      tiempo: tiempos[`${paradaId}-${lineaId}`] // Clave corregida: parada-linea
+      tiempo: tiempos[`${parada.id}-${lineaId}`] // Clave corregida: parada-linea
     }));
 
     return (
