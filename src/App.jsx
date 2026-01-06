@@ -662,7 +662,9 @@ export default function App() {
               {lastUpdate && <span style={{ color: t.textMuted, fontSize: 12 }}>{lastUpdate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {selectedParada.lineas.map(lineaId => {
+              {selectedParada.lineas
+                .filter(lineaId => !selectedLinea || lineaId === selectedLinea)
+                .map(lineaId => {
                 const linea = getLinea(lineaId);
                 const tiempo = tiempos[`${selectedParada.id}-${lineaId}`];
                 const fmt = formatTiempo(tiempo);
@@ -732,6 +734,26 @@ export default function App() {
     // Key estable - no cambia con selección de parada
     const mapKey = `${activeTab}-${lineaId || 'general'}`;
 
+    // Icono personalizado para ubicación del usuario
+    const userLocationIcon = L.divIcon({
+      className: 'user-location-marker',
+      html: `
+        <div style="
+          width: 20px;
+          height: 20px;
+          background: #2196F3;
+          border: 3px solid #fff;
+          border-radius: 50%;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          position: relative;
+          left: -10px;
+          top: -10px;
+        "></div>
+      `,
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
+    });
+
     return (
       <div style={{ marginBottom: 16 }}>
         <button
@@ -780,7 +802,10 @@ export default function App() {
 
           {/* Ubicación del usuario */}
           {userLocation && (
-            <Marker position={[userLocation.lat, userLocation.lng]}>
+            <Marker
+              position={[userLocation.lat, userLocation.lng]}
+              icon={userLocationIcon}
+            >
               <Popup>
                 <strong>Tu ubicación</strong>
               </Popup>
