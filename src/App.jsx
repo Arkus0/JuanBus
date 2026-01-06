@@ -723,7 +723,8 @@ export default function App() {
 
   // Mapa genérico para Cercanas, Favoritos y Líneas
   const GeneralMapView = ({ paradas, lineaId = null }) => {
-    const [isMapExpanded, setIsMapExpanded] = useState(false);
+    // En Cercanas el mapa expandido por defecto, en el resto colapsado
+    const [isMapExpanded, setIsMapExpanded] = useState(activeTab === 'cercanas');
     // Centro inicial solo la primera vez, no en cada render
     const [initialCenter] = useState(() =>
       userLocation || (paradas.length > 0 ? { lat: paradas[0].lat, lng: paradas[0].lng } : { lat: 36.84, lng: -2.46 })
