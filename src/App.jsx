@@ -715,18 +715,55 @@ export default function App() {
 
   // Mapa genérico para Cercanas, Favoritos y Líneas
   const GeneralMapView = ({ paradas, lineaId = null }) => {
-    const center = userLocation || (paradas.length > 0 ? { lat: paradas[0].lat, lng: paradas[0].lng } : { lat: 36.84, lng: -2.46 });
-    // Key único para evitar re-inicialización del mapa al seleccionar paradas
-    const mapKey = `${activeTab}-${viewMode}-${lineaId || 'general'}`;
+    const [isMapExpanded, setIsMapExpanded] = useState(false);
+    // Centro inicial solo la primera vez, no en cada render
+    const [initialCenter] = useState(() =>
+      userLocation || (paradas.length > 0 ? { lat: paradas[0].lat, lng: paradas[0].lng } : { lat: 36.84, lng: -2.46 })
+    );
+    // Key estable - no cambia con selección de parada
+    const mapKey = `${activeTab}-${lineaId || 'general'}`;
 
     return (
-      <div style={{ height: 500, borderRadius: 16, overflow: 'hidden', border: `1px solid ${t.border}`, marginBottom: 16 }}>
-        <MapContainer
-          key={mapKey}
-          center={[center.lat, center.lng]}
-          zoom={13}
-          style={{ height: '100%', width: '100%' }}
+      <div style={{ marginBottom: 16 }}>
+        <button
+          onClick={() => setIsMapExpanded(!isMapExpanded)}
+          style={{
+            width: '100%',
+            background: t.bgCard,
+            border: `1px solid ${t.border}`,
+            borderRadius: 12,
+            padding: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            color: t.text,
+            fontSize: 14,
+            fontWeight: 600
+          }}
         >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <MapIcon size={18} color={t.accent} />
+            Ver mapa {isMapExpanded ? '' : `(${paradas.length} paradas)`}
+          </div>
+          <ChevronDown
+            size={18}
+            style={{
+              transform: isMapExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.3s ease'
+            }}
+          />
+        </button>
+
+        {isMapExpanded && (
+          <div style={{ height: 350, borderRadius: 12, overflow: 'hidden', border: `1px solid ${t.border}`, marginTop: 12 }}>
+            <MapContainer
+              key={mapKey}
+              center={[initialCenter.lat, initialCenter.lng]}
+              zoom={13}
+              style={{ height: '100%', width: '100%' }}
+              scrollWheelZoom={false}
+            >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -758,18 +795,58 @@ export default function App() {
               </Popup>
             </Marker>
           ))}
-        </MapContainer>
+            </MapContainer>
+          </div>
+        )}
       </div>
     );
   };
 
   // Componente de Mapa del Planificador de Rutas
   const MapView = ({ rutas }) => {
+    const [isMapExpanded, setIsMapExpanded] = useState(false);
     const center = origenCoords || destinoCoords || userLocation || { lat: 36.84, lng: -2.46 };
 
     return (
-      <div style={{ height: 400, borderRadius: 16, overflow: 'hidden', border: `1px solid ${t.border}` }}>
-        <MapContainer center={[center.lat, center.lng]} zoom={13} style={{ height: '100%', width: '100%' }}>
+      <div style={{ marginBottom: 16 }}>
+        <button
+          onClick={() => setIsMapExpanded(!isMapExpanded)}
+          style={{
+            width: '100%',
+            background: t.bgCard,
+            border: `1px solid ${t.border}`,
+            borderRadius: 12,
+            padding: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            color: t.text,
+            fontSize: 14,
+            fontWeight: 600
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <MapIcon size={18} color={t.accent} />
+            Ver mapa de ruta
+          </div>
+          <ChevronDown
+            size={18}
+            style={{
+              transform: isMapExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.3s ease'
+            }}
+          />
+        </button>
+
+        {isMapExpanded && (
+          <div style={{ height: 350, borderRadius: 12, overflow: 'hidden', border: `1px solid ${t.border}`, marginTop: 12 }}>
+            <MapContainer
+              center={[center.lat, center.lng]}
+              zoom={13}
+              style={{ height: '100%', width: '100%' }}
+              scrollWheelZoom={false}
+            >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -804,7 +881,9 @@ export default function App() {
               />
             </>
           )}
-        </MapContainer>
+            </MapContainer>
+          </div>
+        )}
       </div>
     );
   };
@@ -910,6 +989,7 @@ export default function App() {
   // Widget de Trayecto Casa-Trabajo
   const CommuteWidget = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
+    const [isExpanded, setIsExpanded] = useState(false);
 
     // Actualizar la hora cada minuto
     useEffect(() => {
@@ -937,89 +1017,112 @@ export default function App() {
     }));
 
     return (
-      <div style={{
-        background: t.gradient,
-        borderRadius: 16,
-        padding: 20,
-        marginBottom: 16,
-        color: '#fff'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+      <div
+        onClick={() => setIsExpanded(!isExpanded)}
+        style={{
+          background: t.gradient,
+          borderRadius: 12,
+          padding: isExpanded ? 16 : 12,
+          marginBottom: 12,
+          color: '#fff',
+          cursor: 'pointer',
+          transition: 'all 0.3s ease'
+        }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {isGoingToWork ? (
-            <Briefcase size={28} />
+            <Briefcase size={20} />
           ) : (
-            <Home size={28} />
+            <Home size={20} />
           )}
           <div style={{ flex: 1 }}>
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-              {isGoingToWork ? '⏰ Hora de ir al curro' : '🏠 Hora de volver a casa'}
-            </h3>
-            <p style={{ margin: '4px 0 0', fontSize: 13, opacity: 0.9 }}>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>
+              {isGoingToWork ? '⏰ Al curro' : '🏠 A casa'}
+            </div>
+            {!isExpanded && (
+              <div style={{ fontSize: 11, opacity: 0.9, marginTop: 2 }}>
+                {parada.nombre.length > 25 ? parada.nombre.substring(0, 25) + '...' : parada.nombre}
+              </div>
+            )}
+          </div>
+          <ChevronDown
+            size={18}
+            style={{
+              transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.3s ease'
+            }}
+          />
+        </div>
+
+        {isExpanded && (
+          <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 12 }}>
+            <p style={{ margin: '0 0 12px 0', fontSize: 13, opacity: 0.9 }}>
               {parada.nombre}
             </p>
-          </div>
-          <Clock size={20} style={{ opacity: 0.8 }} />
-        </div>
 
-        {/* Tiempos de las líneas */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {tiemposParada.map(({ lineaId, linea, tiempo }) => (
-            <div
-              key={lineaId}
+            {/* Tiempos de las líneas */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {tiemposParada.map(({ lineaId, linea, tiempo }) => (
+                <div
+                  key={lineaId}
+                  style={{
+                    background: 'rgba(255,255,255,0.15)',
+                    borderRadius: 8,
+                    padding: '8px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{
+                      background: linea.color,
+                      color: '#fff',
+                      padding: '3px 8px',
+                      borderRadius: 5,
+                      fontSize: 11,
+                      fontWeight: 700
+                    }}>
+                      L{lineaId}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 500 }}>
+                      {linea.nombre}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>
+                    {tiempo ? tiempo : '—'}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                loadTiempos(parada);
+              }}
+              disabled={loading || !isOnline}
               style={{
-                background: 'rgba(255,255,255,0.15)',
-                borderRadius: 10,
-                padding: '10px 14px',
+                marginTop: 10,
+                width: '100%',
+                background: 'rgba(255,255,255,0.2)',
+                border: 'none',
+                borderRadius: 8,
+                padding: '8px 12px',
+                color: '#fff',
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: loading || !isOnline ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between'
+                justifyContent: 'center',
+                gap: 6
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{
-                  background: linea.color,
-                  color: '#fff',
-                  padding: '4px 10px',
-                  borderRadius: 6,
-                  fontSize: 12,
-                  fontWeight: 700
-                }}>
-                  L{lineaId}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 500 }}>
-                  {linea.nombre}
-                </span>
-              </div>
-              <div style={{ fontSize: 14, fontWeight: 700 }}>
-                {tiempo ? tiempo : '—'}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <button
-          onClick={() => loadTiempos(parada)}
-          disabled={loading || !isOnline}
-          style={{
-            marginTop: 12,
-            width: '100%',
-            background: 'rgba(255,255,255,0.2)',
-            border: 'none',
-            borderRadius: 10,
-            padding: '10px 14px',
-            color: '#fff',
-            fontWeight: 600,
-            fontSize: 14,
-            cursor: loading || !isOnline ? 'not-allowed' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8
-          }}
-        >
-          <RefreshCw size={16} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-          {loading ? 'Actualizando...' : 'Actualizar tiempos'}
-        </button>
+              <RefreshCw size={14} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+              {loading ? 'Actualizando...' : 'Actualizar'}
+            </button>
+          </div>
+        )}
       </div>
     );
   };
