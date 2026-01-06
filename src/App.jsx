@@ -1010,8 +1010,52 @@ export default function App() {
     const hour = currentTime.getHours();
     const isGoingToWork = hour >= 6 && hour < 11;
 
-    // Obtener la parada relevante
-    const paradaId = isGoingToWork ? casaParadaId : trabajoParadaId;
+    // Lógica inteligente para obtener la parada relevante
+    let paradaId = null;
+    let rutaCalculada = null;
+    let esRutaDinamica = false;
+
+    if (isGoingToWork) {
+      // "Al curro" → mostrar tiempos de parada CASA (coges bus en casa)
+      paradaId = casaParadaId;
+    } else {
+      // "A casa" → lógica inteligente
+      const paradaTrabajo = trabajoParadaId ? PARADAS.find(p => p.id === trabajoParadaId) : null;
+      const paradaCasa = casaParadaId ? PARADAS.find(p => p.id === casaParadaId) : null;
+
+      if (paradaTrabajo && userLocation && paradaCasa) {
+        // Calcular distancia al trabajo
+        const distanciaTrabajo = haversineDistance(
+          userLocation.lat, userLocation.lng,
+          paradaTrabajo.lat, paradaTrabajo.lng
+        );
+
+        if (distanciaTrabajo < 500) {
+          // Estás cerca del trabajo → mostrar tiempos de parada TRABAJO
+          paradaId = trabajoParadaId;
+        } else {
+          // Estás lejos del trabajo → calcular ruta a casa
+          const rutas = calcularRutas(
+            userLocation,
+            { lat: paradaCasa.lat, lng: paradaCasa.lng }
+          );
+
+          if (rutas.length > 0) {
+            rutaCalculada = rutas[0]; // Primera ruta (recomendada)
+            // Extraer parada origen de la ruta
+            const primeraParada = rutaCalculada.paradas?.[0];
+            if (primeraParada) {
+              paradaId = primeraParada;
+              esRutaDinamica = true;
+            }
+          }
+        }
+      } else {
+        // Fallback: mostrar parada trabajo si existe
+        paradaId = trabajoParadaId;
+      }
+    }
+
     const parada = paradaId ? PARADAS.find(p => p.id === paradaId) : null;
 
     // No mostrar el widget si no hay parada configurada
@@ -1067,6 +1111,23 @@ export default function App() {
             <p style={{ margin: '0 0 12px 0', fontSize: 13, opacity: 0.9 }}>
               {parada.nombre}
             </p>
+
+            {/* Indicador de ruta dinámica */}
+            {esRutaDinamica && rutaCalculada && (
+              <div style={{
+                background: 'rgba(255,255,255,0.2)',
+                borderRadius: 8,
+                padding: '8px 10px',
+                marginBottom: 12,
+                fontSize: 11,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}>
+                <Navigation size={14} />
+                <span>Ruta calculada • {formatDistance(rutaCalculada.distanciaAndando)} andando</span>
+              </div>
+            )}
 
             {/* Tiempos de las líneas */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
