@@ -470,42 +470,62 @@ export default function App() {
     if (!deferredSearchTerm) return src;
 
     const searchTermNormalized = normalizeText(deferredSearchTerm);
+    const searchWords = searchTermNormalized.split(/\s+/).filter(w => w.length > 0);
     let resultados = [];
 
-    // 1. Buscar por sinónimos/POI
+    // 1. Buscar por sinónimos/POI primero
     const paradasPOI = [];
-    Object.entries(SINONIMOS_POI).forEach(([sinonimo, paradaIds]) => {
-      if (searchTermNormalized.includes(sinonimo) || sinonimo.includes(searchTermNormalized)) {
-        paradaIds.forEach(id => {
-          const parada = src.find(p => p.id === id);
-          if (parada && !paradasPOI.find(p => p.id === id)) {
-            paradasPOI.push(parada);
-          }
-        });
-      }
+    searchWords.forEach(word => {
+      Object.entries(SINONIMOS_POI).forEach(([sinonimo, paradaIds]) => {
+        if (word.includes(sinonimo) || sinonimo.includes(word)) {
+          paradaIds.forEach(id => {
+            const parada = src.find(p => p.id === id);
+            if (parada && !paradasPOI.find(p => p.id === id)) {
+              paradasPOI.push(parada);
+            }
+          });
+        }
+      });
     });
 
-    // 2. Búsqueda fuzzy con Fuse.js
+    // 2. Configurar Fuse.js para búsqueda fuzzy
     const fuse = new Fuse(src, {
-      keys: [
-        { name: 'nombre', weight: 0.7 },
-        { name: 'id', weight: 0.2 },
-        { name: 'lineas', weight: 0.1 }
-      ],
-      threshold: 0.4, // 0 = exacto, 1 = cualquier cosa
+      keys: ['nombre', 'id'],
+      threshold: 0.3, // Más estricto para evitar falsos positivos
       distance: 100,
       ignoreLocation: true,
+      minMatchCharLength: 3,
       getFn: (obj, path) => {
         if (path === 'nombre') return normalizeText(obj.nombre);
         if (path === 'id') return obj.id.toString();
-        if (path === 'lineas') return obj.lineas.map(l => `l${l}`).join(' ');
         return '';
       }
     });
 
-    const fuseResults = fuse.search(searchTermNormalized).map(r => r.item);
+    // 3. Buscar con cada palabra individualmente
+    const fuseResultsMap = new Map();
+    searchWords.forEach(word => {
+      const results = fuse.search(word);
+      results.forEach(result => {
+        fuseResultsMap.set(result.item.id, result.item);
+      });
+    });
 
-    // 3. Combinar resultados (POI primero, luego fuzzy, sin duplicados)
+    // 4. Filtrar resultados: debe coincidir ALGUNA palabra (no todas)
+    const fuseResults = Array.from(fuseResultsMap.values()).filter(parada => {
+      const nombreNorm = normalizeText(parada.nombre);
+      const idStr = parada.id.toString();
+      const lineasStr = parada.lineas.map(l => `l${l}`).join(' ');
+
+      // Al menos una palabra debe coincidir
+      return searchWords.some(word =>
+        nombreNorm.includes(word) ||
+        idStr.includes(word) ||
+        lineasStr.includes(word)
+      );
+    });
+
+    // 5. Combinar resultados (POI primero, luego fuzzy, sin duplicados)
     const seen = new Set();
     [...paradasPOI, ...fuseResults].forEach(parada => {
       if (!seen.has(parada.id)) {
@@ -514,7 +534,7 @@ export default function App() {
       }
     });
 
-    // 4. Búsqueda contextual: ordenar por relevancia
+    // 6. Búsqueda contextual: ordenar por relevancia
     if (activeTab === 'cercanas' && userLocation) {
       // En Cercanas: priorizar por distancia
       resultados.sort((a, b) => (a.distancia || 0) - (b.distancia || 0));
