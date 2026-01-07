@@ -377,6 +377,7 @@ export default function App() {
   const deferredSearchTerm = useDeferredValue(searchTerm); // Debouncing de búsqueda
   const [selectedParada, setSelectedParada] = useState(null);
   const [selectedLinea, setSelectedLinea] = useState(null);
+  const [commuteFilterLineas, setCommuteFilterLineas] = useState(null); // Filtro de líneas desde widget casa/curro
   const [favoritos, setFavoritos] = useState(() =>
     safeJsonParse(localStorage.getItem('surbus_fav'), [])
   );
@@ -695,8 +696,18 @@ export default function App() {
 
   const ParadaDetail = () => {
     if (!selectedParada) return null;
+
+    // Cerrar modal y limpiar filtro
+    const handleClose = () => {
+      setSelectedParada(null);
+      setCommuteFilterLineas(null);
+    };
+
+    // Determinar qué líneas mostrar
+    const lineasAMostrar = commuteFilterLineas || selectedParada.lineas;
+
     return (
-      <div onClick={() => setSelectedParada(null)} style={{
+      <div onClick={handleClose} style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)',
         zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
       }}>
@@ -710,11 +721,11 @@ export default function App() {
             <div style={{ flex: 1 }}>
               <h2 style={{ color: t.text, margin: 0, fontSize: 17, fontWeight: 700 }}>{selectedParada.nombre}</h2>
               <p style={{ color: t.textMuted, margin: '4px 0 0', fontSize: 13 }}>
-                {selectedParada.lineas.length} líneas
+                {commuteFilterLineas ? `${lineasAMostrar.length} ${lineasAMostrar.length === 1 ? 'línea útil' : 'líneas útiles'}` : `${selectedParada.lineas.length} líneas`}
                 {selectedParada.distancia !== undefined && ` • ${formatDistance(selectedParada.distancia)}`}
               </p>
             </div>
-            <button onClick={() => setSelectedParada(null)} style={{ background: t.bgCard, border: 'none', borderRadius: 12, padding: 10, cursor: 'pointer' }}>
+            <button onClick={handleClose} style={{ background: t.bgCard, border: 'none', borderRadius: 12, padding: 10, cursor: 'pointer' }}>
               <X size={20} color={t.text} />
             </button>
           </div>
@@ -756,7 +767,7 @@ export default function App() {
               {lastUpdate && <span style={{ color: t.textMuted, fontSize: 12 }}>{lastUpdate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {selectedParada.lineas
+              {lineasAMostrar
                 .filter(lineaId => !selectedLinea || lineaId === selectedLinea)
                 .map(lineaId => {
                 const linea = getLinea(lineaId);
@@ -1294,6 +1305,29 @@ export default function App() {
 
     // Función para manejar el click: navegar directamente a la parada
     const handleClick = () => {
+      // Calcular líneas relevantes según el contexto
+      let lineasRelevantes = null;
+
+      if (isGoingToWork) {
+        // Al curro: filtrar líneas comunes entre casa y trabajo
+        const paradaTrabajo = trabajoParadaId ? PARADAS.find(p => p.id === trabajoParadaId) : null;
+        if (paradaTrabajo) {
+          // Líneas que están tanto en casa como en trabajo
+          lineasRelevantes = parada.lineas.filter(l => paradaTrabajo.lineas.includes(l));
+        }
+      } else {
+        // A casa: filtrar líneas relevantes
+        const paradaCasa = casaParadaId ? PARADAS.find(p => p.id === casaParadaId) : null;
+        if (esRutaDinamica && rutaCalculada) {
+          // Si es ruta dinámica, usar las líneas de la ruta
+          lineasRelevantes = rutaCalculada.lineas || null;
+        } else if (paradaCasa) {
+          // Líneas comunes entre trabajo y casa
+          lineasRelevantes = parada.lineas.filter(l => paradaCasa.lineas.includes(l));
+        }
+      }
+
+      setCommuteFilterLineas(lineasRelevantes);
       setSelectedParada(parada);
     };
 
