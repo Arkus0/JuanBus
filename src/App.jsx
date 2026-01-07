@@ -363,6 +363,123 @@ function usePWA() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// COMPONENTES REFACTORIZADOS (fuera de App para mejor rendimiento)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Componente LineasView - Lista todas las líneas de autobús
+const LineasView = ({ theme, selectedLinea, setSelectedLinea, setSelectedParada }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    {LINEAS.map(linea => {
+      const paradasLinea = PARADAS.filter(p => p.lineas.includes(linea.id));
+      const isExp = selectedLinea === linea.id;
+      return (
+        <div key={linea.id} style={{ background: theme.bgCard, borderRadius: 16, overflow: 'hidden', border: `1px solid ${isExp ? linea.color : theme.border}` }}>
+          <div onClick={() => setSelectedLinea(isExp ? null : linea.id)} style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer' }}>
+            <div style={{ width: 52, height: 52, borderRadius: 14, background: linea.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ color: '#fff', fontWeight: 800, fontSize: 18 }}>L{linea.id}</span>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ color: theme.text, fontWeight: 600, fontSize: 15 }}>{linea.nombre}</div>
+              <div style={{ color: theme.textMuted, fontSize: 13, marginTop: 2 }}>{paradasLinea.length} paradas</div>
+            </div>
+            <ChevronDown size={20} color={theme.textMuted} style={{ transform: isExp ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
+          </div>
+          {isExp && (
+            <div style={{ padding: '0 20px 16px', borderTop: `1px solid ${theme.border}`, paddingTop: 16, maxHeight: 300, overflowY: 'auto' }}>
+              {paradasLinea.map((p, i) => (
+                <div key={p.id} onClick={() => setSelectedParada(p)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: theme.bgHover, borderRadius: 10, cursor: 'pointer', marginBottom: 8 }}>
+                  <div style={{ width: 24, height: 24, borderRadius: '50%', background: linea.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>{i + 1}</div>
+                  <span style={{ color: theme.text, fontSize: 13, flex: 1 }}>{p.nombre}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    })}
+  </div>
+);
+
+// Componente ParadaCard - Tarjeta de parada individual
+const ParadaCard = ({ parada, showHomeWorkButtons = false, theme, setSelectedParada, casaParadaId, setCasaParadaId, trabajoParadaId, setTrabajoParadaId, favoritos, toggleFavorito }) => (
+  <div onClick={() => setSelectedParada(parada)} style={{
+    background: theme.bgCard, borderRadius: 16, padding: '16px 20px', cursor: 'pointer',
+    border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', gap: 14
+  }}>
+    <div style={{ width: 48, height: 48, borderRadius: 12, background: theme.gradient,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>{parada.id}</span>
+    </div>
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ color: theme.text, fontWeight: 600, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {parada.nombre}
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+        {parada.lineas.slice(0, 5).map(l => {
+          const linea = getLinea(l);
+          return linea && <span key={l} style={{ background: linea.color, color: '#fff', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>L{l}</span>;
+        })}
+        {parada.lineas.length > 5 && <span style={{ color: theme.textMuted, fontSize: 11 }}>+{parada.lineas.length - 5}</span>}
+      </div>
+      {parada.distancia !== undefined && (
+        <div style={{ color: theme.accent, fontSize: 12, marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Navigation size={12} />{formatDistance(parada.distancia)}
+        </div>
+      )}
+    </div>
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      {showHomeWorkButtons && (
+        <>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setCasaParadaId(casaParadaId === parada.id ? null : parada.id);
+            }}
+            style={{
+              background: casaParadaId === parada.id ? theme.accent : 'transparent',
+              border: `1px solid ${casaParadaId === parada.id ? theme.accent : theme.border}`,
+              borderRadius: 8,
+              cursor: 'pointer',
+              padding: 6,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            title="Marcar como Casa"
+          >
+            <Home size={18} color={casaParadaId === parada.id ? '#fff' : theme.textMuted} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setTrabajoParadaId(trabajoParadaId === parada.id ? null : parada.id);
+            }}
+            style={{
+              background: trabajoParadaId === parada.id ? theme.accent : 'transparent',
+              border: `1px solid ${trabajoParadaId === parada.id ? theme.accent : theme.border}`,
+              borderRadius: 8,
+              cursor: 'pointer',
+              padding: 6,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            title="Marcar como Trabajo"
+          >
+            <Briefcase size={18} color={trabajoParadaId === parada.id ? '#fff' : theme.textMuted} />
+          </button>
+        </>
+      )}
+      <button onClick={(e) => { e.stopPropagation(); toggleFavorito(parada.id); }}
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8 }}>
+        <Heart size={22} fill={favoritos.includes(parada.id) ? '#ef4444' : 'transparent'}
+          color={favoritos.includes(parada.id) ? '#ef4444' : theme.textMuted} />
+      </button>
+    </div>
+  </div>
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -628,84 +745,6 @@ export default function App() {
   // Impacto actual: Rendimiento severamente degradado, pérdida de optimizaciones de React
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const ParadaCard = ({ parada, showHomeWorkButtons = false }) => (
-    <div onClick={() => setSelectedParada(parada)} style={{
-      background: t.bgCard, borderRadius: 16, padding: '16px 20px', cursor: 'pointer',
-      border: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14
-    }}>
-      <div style={{ width: 48, height: 48, borderRadius: 12, background: t.gradient,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>{parada.id}</span>
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ color: t.text, fontWeight: 600, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {parada.nombre}
-        </div>
-        <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-          {parada.lineas.slice(0, 5).map(l => {
-            const linea = getLinea(l);
-            return linea && <span key={l} style={{ background: linea.color, color: '#fff', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>L{l}</span>;
-          })}
-          {parada.lineas.length > 5 && <span style={{ color: t.textMuted, fontSize: 11 }}>+{parada.lineas.length - 5}</span>}
-        </div>
-        {parada.distancia !== undefined && (
-          <div style={{ color: t.accent, fontSize: 12, marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Navigation size={12} />{formatDistance(parada.distancia)}
-          </div>
-        )}
-      </div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        {showHomeWorkButtons && (
-          <>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setCasaParadaId(casaParadaId === parada.id ? null : parada.id);
-              }}
-              style={{
-                background: casaParadaId === parada.id ? t.accent : 'transparent',
-                border: `1px solid ${casaParadaId === parada.id ? t.accent : t.border}`,
-                borderRadius: 8,
-                cursor: 'pointer',
-                padding: 6,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-              title="Marcar como Casa"
-            >
-              <Home size={18} color={casaParadaId === parada.id ? '#fff' : t.textMuted} />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setTrabajoParadaId(trabajoParadaId === parada.id ? null : parada.id);
-              }}
-              style={{
-                background: trabajoParadaId === parada.id ? t.accent : 'transparent',
-                border: `1px solid ${trabajoParadaId === parada.id ? t.accent : t.border}`,
-                borderRadius: 8,
-                cursor: 'pointer',
-                padding: 6,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-              title="Marcar como Trabajo"
-            >
-              <Briefcase size={18} color={trabajoParadaId === parada.id ? '#fff' : t.textMuted} />
-            </button>
-          </>
-        )}
-        <button onClick={(e) => { e.stopPropagation(); toggleFavorito(parada.id); }}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8 }}>
-          <Heart size={22} fill={favoritos.includes(parada.id) ? '#ef4444' : 'transparent'}
-            color={favoritos.includes(parada.id) ? '#ef4444' : t.textMuted} />
-        </button>
-      </div>
-    </div>
-  );
-
   const ParadaDetail = () => {
     if (!selectedParada) return null;
 
@@ -806,39 +845,6 @@ export default function App() {
       </div>
     );
   };
-
-  const LineasView = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {LINEAS.map(linea => {
-        const paradasLinea = PARADAS.filter(p => p.lineas.includes(linea.id));
-        const isExp = selectedLinea === linea.id;
-        return (
-          <div key={linea.id} style={{ background: t.bgCard, borderRadius: 16, overflow: 'hidden', border: `1px solid ${isExp ? linea.color : t.border}` }}>
-            <div onClick={() => setSelectedLinea(isExp ? null : linea.id)} style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer' }}>
-              <div style={{ width: 52, height: 52, borderRadius: 14, background: linea.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ color: '#fff', fontWeight: 800, fontSize: 18 }}>L{linea.id}</span>
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ color: t.text, fontWeight: 600, fontSize: 15 }}>{linea.nombre}</div>
-                <div style={{ color: t.textMuted, fontSize: 13, marginTop: 2 }}>{paradasLinea.length} paradas</div>
-              </div>
-              <ChevronDown size={20} color={t.textMuted} style={{ transform: isExp ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
-            </div>
-            {isExp && (
-              <div style={{ padding: '0 20px 16px', borderTop: `1px solid ${t.border}`, paddingTop: 16, maxHeight: 300, overflowY: 'auto' }}>
-                {paradasLinea.map((p, i) => (
-                  <div key={p.id} onClick={() => setSelectedParada(p)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: t.bgHover, borderRadius: 10, cursor: 'pointer', marginBottom: 8 }}>
-                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: linea.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>{i + 1}</div>
-                    <span style={{ color: t.text, fontSize: 13, flex: 1 }}>{p.nombre}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
 
   // Mapa genérico para Cercanas, Favoritos y Líneas
   const GeneralMapView = ({ paradas, lineaId = null }) => {
@@ -1731,7 +1737,7 @@ export default function App() {
             ) : viewMode === 'list' ? (
               <>
                 <p style={{ color: t.textMuted, fontSize: 13, margin: '0 0 4px' }}>{paradasFiltradas.length} paradas</p>
-                {paradasFiltradas.slice(0, 50).map(p => <ParadaCard key={p.id} parada={p} />)}
+                {paradasFiltradas.slice(0, 50).map(p => <ParadaCard key={p.id} parada={p} theme={t} setSelectedParada={setSelectedParada} casaParadaId={casaParadaId} setCasaParadaId={setCasaParadaId} trabajoParadaId={trabajoParadaId} setTrabajoParadaId={setTrabajoParadaId} favoritos={favoritos} toggleFavorito={toggleFavorito} />)}
               </>
             ) : (
               <GeneralMapView paradas={paradasFiltradas.slice(0, 100)} />
@@ -1747,14 +1753,14 @@ export default function App() {
                 <p style={{ marginTop: 16 }}>No tienes favoritos</p>
               </div>
             ) : viewMode === 'list' ? (
-              PARADAS.filter(p => favoritos.includes(p.id)).map(p => <ParadaCard key={p.id} parada={p} showHomeWorkButtons={true} />)
+              PARADAS.filter(p => favoritos.includes(p.id)).map(p => <ParadaCard key={p.id} parada={p} showHomeWorkButtons={true} theme={t} setSelectedParada={setSelectedParada} casaParadaId={casaParadaId} setCasaParadaId={setCasaParadaId} trabajoParadaId={trabajoParadaId} setTrabajoParadaId={setTrabajoParadaId} favoritos={favoritos} toggleFavorito={toggleFavorito} />)
             ) : (
               <GeneralMapView paradas={PARADAS.filter(p => favoritos.includes(p.id))} />
             )}
           </div>
         )}
 
-        {activeTab === 'lineas' && (viewMode === 'list' ? <LineasView /> : (
+        {activeTab === 'lineas' && (viewMode === 'list' ? <LineasView theme={t} selectedLinea={selectedLinea} setSelectedLinea={setSelectedLinea} setSelectedParada={setSelectedParada} /> : (
           selectedLinea ? (
             <GeneralMapView
               paradas={PARADAS.filter(p => p.lineas.includes(selectedLinea))}
