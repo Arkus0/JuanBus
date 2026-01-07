@@ -891,7 +891,7 @@ export default function App() {
               <div style={{ flex: 1 }}>
                 <div style={{ color: t.text, fontWeight: 600, fontSize: 15 }}>{linea.nombre}</div>
                 <div style={{ color: t.textMuted, fontSize: 13, marginTop: 2 }}>
-                  {linea.sentidos ? `${linea.sentidos.length} sentidos • ${totalParadas} paradas` : `${totalParadas} paradas`}
+                  {totalParadas} paradas
                 </div>
               </div>
               <ChevronDown size={20} color={t.textMuted} style={{ transform: isExp ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
