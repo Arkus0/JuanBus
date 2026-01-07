@@ -1,15 +1,20 @@
 {
   "name": "juan-bus",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "PWA de transporte público de Almería",
   "type": "module",
   "private": true,
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
     "dev": "concurrently \"node server.dev.js\" \"vite\"",
     "dev:vite": "vite",
     "dev:proxy": "node server.dev.js",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "echo 'Linting not configured yet'"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
