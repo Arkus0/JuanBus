@@ -1,0 +1,22 @@
+// Líneas de autobús de Almería
+export const LINEAS = [
+  { id: 1, nombre: "Casco Histórico", color: "#E63946", descripcion: "Recorre el centro histórico" },
+  { id: 2, nombre: "Centro - Hospital Torrecárdenas", color: "#457B9D", descripcion: "Conecta el centro con el hospital" },
+  { id: 3, nombre: "Torrecárdenas - Nueva Almería", color: "#2A9D8F", descripcion: "Hospital a zona residencial" },
+  { id: 4, nombre: "Torrecárdenas - Universidad", color: "#E9C46A", descripcion: "Conexión universitaria" },
+  { id: 5, nombre: "Centro - Villa Blanca", color: "#F4A261", descripcion: "Zona comercial" },
+  { id: 6, nombre: "El Puche - Pescadería", color: "#9B5DE5", descripcion: "Barrios tradicionales" },
+  { id: 7, nombre: "Piedras Redondas", color: "#00BBF9", descripcion: "Norte de la ciudad" },
+  { id: 8, nombre: "Los Molinos - Torrecárdenas", color: "#00F5D4", descripcion: "Zona comercial alternativa" },
+  { id: 11, nombre: "Zapillo - Universidad", color: "#F15BB5", descripcion: "Paseo marítimo y universidad" },
+  { id: 12, nombre: "Nueva Andalucía - Zapillo", color: "#FEE440", descripcion: "Inversa de L11" },
+  { id: 15, nombre: "Circular Levante", color: "#8AC926", descripcion: "Recorrido circular este" },
+  { id: 18, nombre: "Torrecárdenas - Costacabana", color: "#FF6B6B", descripcion: "Hospital a playas" },
+  { id: 19, nombre: "Gregorio Marañón - Universidad", color: "#4ECDC4", descripcion: "Ruta universitaria" },
+  { id: 20, nombre: "Centro - Hospital El Toyo", color: "#45B7D1", descripcion: "Nuevo hospital" },
+  { id: 30, nombre: "Almería - Aeropuerto", color: "#96CEB4", descripcion: "Conexión aeropuerto" },
+  { id: 31, nombre: "Retamar directo", color: "#FFEAA7", descripcion: "Express a Retamar" }
+];
+
+// Helper para obtener una línea por ID
+export const getLinea = (id) => LINEAS.find(l => l.id === id);

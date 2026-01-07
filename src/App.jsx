@@ -8,6 +8,13 @@ import {
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
+// Datos y utilidades
+import { PARADAS, LINEAS, SINONIMOS_POI, getLinea } from './data';
+import { haversineDistance, formatDistance, normalizeText, safeJsonParse, safeLocalStorage, formatTiempo } from './utils/helpers';
+import { fetchTiempoEspera } from './utils/api';
+import { calcularRutas } from './utils/routeCalculator';
+import { usePWA } from './hooks/usePWA';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // DATOS DE SURBUS ALMERÍA
 // ═══════════════════════════════════════════════════════════════════════════
