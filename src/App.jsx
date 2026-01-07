@@ -1661,57 +1661,60 @@ export default function App() {
           setSelectedParada={setSelectedParada}
         />
 
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', paddingBottom: 4 }}>
-          {[
-            { id: 'cercanas', icon: Locate, label: 'Cercanas' },
-            { id: 'favoritos', icon: Star, label: 'Favoritos' },
-            { id: 'lineas', icon: Bus, label: 'Líneas' },
-            { id: 'rutas', icon: MapIcon, label: 'Rutas' },
-          ].map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 11, border: 'none',
-              background: activeTab === tab.id ? t.accent : t.bgCard, color: activeTab === tab.id ? '#fff' : t.textMuted,
-              fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap'
-            }}>
-              <tab.icon size={16} />
-              {tab.label}
-              {tab.id === 'favoritos' && favoritos.length > 0 && (
-                <span style={{ background: activeTab === tab.id ? 'rgba(255,255,255,0.3)' : t.danger, color: '#fff', padding: '2px 6px', borderRadius: 6, fontSize: 11 }}>{favoritos.length}</span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* Toggle Vista Lista/Mapa */}
-        {activeTab !== 'rutas' && (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 16, justifyContent: 'flex-end' }}>
-            <button
-              onClick={() => setViewMode('list')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10,
-                border: `1px solid ${t.border}`, background: viewMode === 'list' ? t.accent : t.bgCard,
-                color: viewMode === 'list' ? '#fff' : t.textMuted, fontWeight: 600, fontSize: 12,
-                cursor: 'pointer'
-              }}
-            >
-              <List size={16} />
-              Lista
-            </button>
-            <button
-              onClick={() => setViewMode('map')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10,
-                border: `1px solid ${t.border}`, background: viewMode === 'map' ? t.accent : t.bgCard,
-                color: viewMode === 'map' ? '#fff' : t.textMuted, fontWeight: 600, fontSize: 12,
-                cursor: 'pointer'
-              }}
-            >
-              <MapIcon size={16} />
-              Mapa
-            </button>
+        {/* Tabs y controles - sticky */}
+        <div style={{ position: 'sticky', top: 80, zIndex: 40, background: `${t.bg}f0`, backdropFilter: 'blur(20px)', marginLeft: -20, marginRight: -20, paddingLeft: 20, paddingRight: 20, paddingTop: 8, paddingBottom: 8, marginBottom: 8 }}>
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', paddingBottom: 4 }}>
+            {[
+              { id: 'cercanas', icon: Locate, label: 'Cercanas' },
+              { id: 'favoritos', icon: Star, label: 'Favoritos' },
+              { id: 'lineas', icon: Bus, label: 'Líneas' },
+              { id: 'rutas', icon: MapIcon, label: 'Rutas' },
+            ].map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 11, border: 'none',
+                background: activeTab === tab.id ? t.accent : t.bgCard, color: activeTab === tab.id ? '#fff' : t.textMuted,
+                fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap'
+              }}>
+                <tab.icon size={16} />
+                {tab.label}
+                {tab.id === 'favoritos' && favoritos.length > 0 && (
+                  <span style={{ background: activeTab === tab.id ? 'rgba(255,255,255,0.3)' : t.danger, color: '#fff', padding: '2px 6px', borderRadius: 6, fontSize: 11 }}>{favoritos.length}</span>
+                )}
+              </button>
+            ))}
           </div>
-        )}
+
+          {/* Toggle Vista Lista/Mapa */}
+          {activeTab !== 'rutas' && (
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setViewMode('list')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10,
+                  border: `1px solid ${t.border}`, background: viewMode === 'list' ? t.accent : t.bgCard,
+                  color: viewMode === 'list' ? '#fff' : t.textMuted, fontWeight: 600, fontSize: 12,
+                  cursor: 'pointer'
+                }}
+              >
+                <List size={16} />
+                Lista
+              </button>
+              <button
+                onClick={() => setViewMode('map')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10,
+                  border: `1px solid ${t.border}`, background: viewMode === 'map' ? t.accent : t.bgCard,
+                  color: viewMode === 'map' ? '#fff' : t.textMuted, fontWeight: 600, fontSize: 12,
+                  cursor: 'pointer'
+                }}
+              >
+                <MapIcon size={16} />
+                Mapa
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Content */}
         {activeTab === 'cercanas' && (
