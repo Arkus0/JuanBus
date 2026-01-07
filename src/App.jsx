@@ -729,20 +729,28 @@ export default function App() {
   // COMPONENTES
   // ═══════════════════════════════════════════════════════════════════════════
   //
-  // ⚠️ PROBLEMA CRÍTICO DE RENDIMIENTO:
-  // Todos los componentes definidos aquí se recrean en CADA render del componente App.
-  // Esto causa re-renders masivos innecesarios y degradación severa del rendimiento.
+  // ⚠️ PROBLEMA DE RENDIMIENTO (EN PROGRESO):
+  // REFACTORIZACIÓN COMPLETADA PARCIALMENTE:
+  // ✅ LineasView - Movido fuera, ya NO se recrea en cada render
+  // ✅ ParadaCard - Movido fuera, ya NO se recrea en cada render
   //
-  // TODO (REFACTORIZACIÓN URGENTE):
-  // - Mover todos estos componentes FUERA del componente App
-  // - Pasarles las props necesarias (tema, handlers, estado)
-  // - Envolver con React.memo donde sea apropiado
-  // - Usar useCallback para todas las funciones que se pasen como props
+  // TODO (REFACTORIZACIÓN PENDIENTE):
+  // Los siguientes componentes AÚN se recrean en cada render y necesitan refactorización:
+  // - ParadaDetail (tiene estado interno con useState)
+  // - GeneralMapView (tiene estado interno con useState)
+  // - LocationSelector (tiene estado interno con useState)
+  // - MapView (complejo, usa Leaflet y tiene estado interno)
+  // - CommuteWidget (complejo, muchas dependencias)
+  // - RoutePlannerView (muy complejo, tiene estado interno y funciones)
   //
-  // Componentes afectados: ParadaCard, ParadaDetail, LineasView, GeneralMapView,
-  // MapView, LocationSelector, CommuteWidget, RoutePlannerView
+  // Pasos para refactorizar cada componente:
+  // 1. Mover componente fuera de App
+  // 2. Pasar props necesarias (tema, handlers, estado)
+  // 3. Envolver con React.memo si es apropiado
+  // 4. Usar useCallback/useMemo para optimizar
+  // 5. Actualizar todos los usos con props correctas
   //
-  // Impacto actual: Rendimiento severamente degradado, pérdida de optimizaciones de React
+  // Impacto actual: Rendimiento mejorado (2/8 componentes), pero aún hay margen de mejora
   // ═══════════════════════════════════════════════════════════════════════════
 
   const ParadaDetail = () => {
