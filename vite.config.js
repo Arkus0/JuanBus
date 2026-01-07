@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icons/*.png'],
       manifest: {
-        name: 'Surbus+ Almería',
-        short_name: 'Surbus+',
-        description: 'Tiempos de espera del transporte público de Almería en tiempo real',
+        name: 'Juan Bus Almería',
+        short_name: 'Juan Bus',
+        description: 'Tiempos de espera y planificador de rutas del transporte público de Almería',
         theme_color: '#00d4aa',
         background_color: '#0a0a0f',
         display: 'standalone',
@@ -93,7 +93,7 @@ export default defineConfig({
             urlPattern: /\/api\/surbus/,
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'surbus-api-cache',
+              cacheName: 'juanbus-api-cache',
               expiration: {
                 maxEntries: 100,
                 maxAgeSeconds: 60 * 5, // 5 minutos

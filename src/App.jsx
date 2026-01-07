@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  MapPin, Bus, Clock, Star, Search, Moon, Sun, Navigation, AlertTriangle, 
-  RefreshCw, ChevronRight, X, Heart, Map as MapIcon, Bell, BellOff, Share2, 
-  Route, History, Settings, Locate, ChevronDown, Filter, Zap, Info, 
-  ExternalLink, Wifi, WifiOff, Download, Check, CloudOff 
+import { useState, useEffect, useCallback, useMemo, useDeferredValue } from 'react';
+import {
+  MapPin, Bus, Clock, Star, Search, Moon, Sun, Navigation, AlertTriangle,
+  RefreshCw, ChevronRight, X, Heart, Map as MapIcon, Bell, BellOff, Share2,
+  History, Settings, Locate, ChevronDown, Filter, Zap, Info,
+  ExternalLink, Wifi, WifiOff, Download, Check, CloudOff, List, Home, Briefcase
 } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import L from 'leaflet';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DATOS DE SURBUS ALMERÍA
@@ -32,6 +34,55 @@ const LINEAS = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
+// SINÓNIMOS Y PUNTOS DE INTERÉS (POI)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Diccionario de sinónimos y POIs → IDs de paradas relacionadas
+const SINONIMOS_POI = {
+  // Hospitales y centros médicos
+  'hospital': [22, 21, 332, 333], // Torrecárdenas, Materno, El Toyo
+  'torrecardenas': [22, 21, 426], // Hospital + parking
+  'materno': [21],
+  'toyo': [332, 333],
+
+  // Universidad y centros educativos
+  'universidad': [144, 482], // Universidad
+  'uni': [144, 482],
+  'campus': [144],
+
+  // Transporte
+  'estacion': [292], // Estación Intermodal
+  'intermodal': [292],
+  'aeropuerto': [188],
+  'aena': [188],
+
+  // Comercio
+  'ikea': [18],
+  'carrefour': [56],
+  'mediterraneo': [61, 67], // Centro Comercial Mediterráneo
+
+  // Zonas y barrios
+  'centro': [292, 420], // Centro ciudad
+  'rambla': [80, 478],
+  'zapillo': [165],
+  'retamar': [192, 193, 195, 196],
+  'alquian': [194, 195, 268, 457, 458],
+  'nueva almeria': [138, 149, 150],
+
+  // Deportes y ocio
+  'estadio': [37, 320, 23, 385, 388], // Varios estadios
+  'auditorio': [136, 152],
+  'playa': [149, 443],
+  'parque': [56, 57, 162],
+
+  // Otros POIs
+  'cementerio': [17],
+  'alcazaba': [409],
+  'cable ingles': [294, 318],
+  'palmeral': [135, 164]
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // UTILIDADES
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -48,17 +99,229 @@ const haversineDistance = (lat1, lon1, lat2, lon2) => {
 const formatDistance = (m) => m < 1000 ? `${Math.round(m)} m` : `${(m/1000).toFixed(1)} km`;
 const getLinea = (id) => LINEAS.find(l => l.id === id);
 
+// Normalizar texto: eliminar acentos y convertir a minúsculas
+const normalizeText = (str) => str
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '');
+
+// Parse JSON seguro con fallback
+const safeJsonParse = (value, fallback) => {
+  try {
+    return value !== null ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+// formatTiempo movido fuera del componente para evitar recreación
+const formatTiempo = (tiempo, theme) => {
+  if (!tiempo?.success) return { text: 'Sin datos', color: theme.textMuted };
+  if (!tiempo.waitTimeString) return { text: tiempo.waitTimeType === 3 ? 'Sin servicio' : '...', color: theme.textMuted };
+  const mins = parseInt(tiempo.waitTimeString);
+  if (isNaN(mins)) return { text: tiempo.waitTimeString, color: theme.accent };
+  if (mins <= 3) return { text: `${mins} min`, color: theme.success };
+  if (mins <= 10) return { text: `${mins} min`, color: theme.warning };
+  return { text: `${mins} min`, color: theme.danger };
+};
+
 // API usando el proxy de Vercel (evita CORS)
 const API_BASE = '/api/surbus';
 
 const fetchTiempoEspera = async (paradaId, lineaId) => {
   try {
     const res = await fetch(`${API_BASE}?l=${lineaId}&bs=${paradaId}`);
-    return await res.json();
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    const data = await res.json();
+    if (!data.success && data.error) {
+      return { success: false, error: data.error };
+    }
+    return data;
   } catch (e) {
     return { success: false, error: e.message };
   }
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ALGORITMO DE PLANIFICACIÓN DE RUTAS
+// ═══════════════════════════════════════════════════════════════════════════
+
+const calcularRutas = (origenCoords, destinoCoords) => {
+  if (!origenCoords || !destinoCoords) return [];
+
+  const UMBRAL_TRANSBORDO = 500; // Metros - solo hacer transbordo si ahorra >500m andando
+  const MAX_DISTANCIA_PARADA = 800; // Metros - radio para buscar paradas cercanas
+
+  const rutas = [];
+
+  // Pre-indexar paradas por línea para optimizar búsquedas (O(n) en lugar de O(n³))
+  const paradasPorLinea = {};
+  PARADAS.forEach(p => {
+    p.lineas.forEach(l => {
+      if (!paradasPorLinea[l]) paradasPorLinea[l] = [];
+      paradasPorLinea[l].push(p);
+    });
+  });
+
+  // 1. Encontrar paradas cercanas al origen y destino
+  const paradasOrigen = PARADAS.map(p => ({
+    ...p,
+    distanciaAlOrigen: haversineDistance(origenCoords.lat, origenCoords.lng, p.lat, p.lng)
+  })).filter(p => p.distanciaAlOrigen <= MAX_DISTANCIA_PARADA)
+    .sort((a, b) => a.distanciaAlOrigen - b.distanciaAlOrigen)
+    .slice(0, 10); // Top 10 paradas más cercanas al origen
+
+  const paradasDestino = PARADAS.map(p => ({
+    ...p,
+    distanciaAlDestino: haversineDistance(destinoCoords.lat, destinoCoords.lng, p.lat, p.lng)
+  })).filter(p => p.distanciaAlDestino <= MAX_DISTANCIA_PARADA)
+    .sort((a, b) => a.distanciaAlDestino - b.distanciaAlDestino)
+    .slice(0, 10); // Top 10 paradas más cercanas al destino
+
+  if (paradasOrigen.length === 0 || paradasDestino.length === 0) return [];
+
+  // 2. RUTAS DIRECTAS (sin transbordo)
+  paradasOrigen.forEach(paradaOrigen => {
+    paradasDestino.forEach(paradaDestino => {
+      if (paradaOrigen.id === paradaDestino.id) return;
+
+      // Buscar líneas en común
+      const lineasComunes = paradaOrigen.lineas.filter(l => paradaDestino.lineas.includes(l));
+
+      lineasComunes.forEach(lineaId => {
+        const linea = getLinea(lineaId);
+        const distanciaAndando = paradaOrigen.distanciaAlOrigen + paradaDestino.distanciaAlDestino;
+        const tiempoEstimado = Math.round(distanciaAndando / 70) + 10; // ~70m/min andando + 10min bus aprox
+
+        rutas.push({
+          tipo: 'directa',
+          lineas: [lineaId],
+          paradas: [paradaOrigen, paradaDestino],
+          distanciaAndando,
+          tiempoEstimado,
+          detalles: `Línea ${lineaId}`,
+          segmentos: [{
+            tipo: 'caminar',
+            distancia: paradaOrigen.distanciaAlOrigen,
+            desde: 'Origen',
+            hasta: paradaOrigen.nombre
+          }, {
+            tipo: 'bus',
+            linea: lineaId,
+            color: linea.color,
+            nombre: linea.nombre,
+            desde: paradaOrigen.nombre,
+            hasta: paradaDestino.nombre
+          }, {
+            tipo: 'caminar',
+            distancia: paradaDestino.distanciaAlDestino,
+            desde: paradaDestino.nombre,
+            hasta: 'Destino'
+          }]
+        });
+      });
+    });
+  });
+
+  // 3. RUTAS CON TRANSBORDO (solo si mejora significativamente la distancia andando)
+  const mejorRutaDirecta = rutas.length > 0
+    ? rutas.reduce((min, r) => r.distanciaAndando < min.distanciaAndando ? r : min, rutas[0])
+    : null;
+
+  if (mejorRutaDirecta && mejorRutaDirecta.distanciaAndando > UMBRAL_TRANSBORDO) {
+    paradasOrigen.forEach(paradaOrigen => {
+      paradaOrigen.lineas.forEach(lineaOrigen => {
+        const paradasLineaOrigen = paradasPorLinea[lineaOrigen] || [];
+
+        paradasLineaOrigen.forEach(paradaTransbordo => {
+          if (paradaTransbordo.id === paradaOrigen.id) return;
+
+          const distanciaTransbordo = haversineDistance(
+            paradaTransbordo.lat, paradaTransbordo.lng,
+            destinoCoords.lat, destinoCoords.lng
+          );
+
+          // Buscar líneas que conecten al destino desde el transbordo
+          paradasDestino.forEach(paradaDestino => {
+            if (paradaDestino.id === paradaTransbordo.id) return;
+
+            const lineasTransbordo = paradaTransbordo.lineas.filter(l =>
+              l !== lineaOrigen && paradaDestino.lineas.includes(l)
+            );
+
+            lineasTransbordo.forEach(lineaDestino => {
+              const lineaO = getLinea(lineaOrigen);
+              const lineaD = getLinea(lineaDestino);
+
+              const distanciaAndando = paradaOrigen.distanciaAlOrigen + paradaDestino.distanciaAlDestino;
+
+              // Solo añadir si mejora significativamente vs ruta directa
+              if (!mejorRutaDirecta || (mejorRutaDirecta.distanciaAndando - distanciaAndando) > UMBRAL_TRANSBORDO) {
+                const tiempoEstimado = Math.round(distanciaAndando / 70) + 20; // +20min por bus y transbordo
+
+                rutas.push({
+                  tipo: 'transbordo',
+                  lineas: [lineaOrigen, lineaDestino],
+                  paradas: [paradaOrigen, paradaTransbordo, paradaDestino],
+                  distanciaAndando,
+                  tiempoEstimado,
+                  detalles: `L${lineaOrigen} → L${lineaDestino}`,
+                  segmentos: [{
+                    tipo: 'caminar',
+                    distancia: paradaOrigen.distanciaAlOrigen,
+                    desde: 'Origen',
+                    hasta: paradaOrigen.nombre
+                  }, {
+                    tipo: 'bus',
+                    linea: lineaOrigen,
+                    color: lineaO.color,
+                    nombre: lineaO.nombre,
+                    desde: paradaOrigen.nombre,
+                    hasta: paradaTransbordo.nombre
+                  }, {
+                    tipo: 'transbordo',
+                    en: paradaTransbordo.nombre
+                  }, {
+                    tipo: 'bus',
+                    linea: lineaDestino,
+                    color: lineaD.color,
+                    nombre: lineaD.nombre,
+                    desde: paradaTransbordo.nombre,
+                    hasta: paradaDestino.nombre
+                  }, {
+                    tipo: 'caminar',
+                    distancia: paradaDestino.distanciaAlDestino,
+                    desde: paradaDestino.nombre,
+                    hasta: 'Destino'
+                  }]
+                });
+              }
+            });
+          });
+        });
+      });
+    });
+  }
+
+  // Ordenar por distancia andando (prioridad) y luego por tiempo
+  return rutas
+    .sort((a, b) => {
+      const diffAndando = a.distanciaAndando - b.distanciaAndando;
+      if (Math.abs(diffAndando) > 100) return diffAndando; // Si la diferencia es >100m, priorizar menos andando
+      return a.tiempoEstimado - b.tiempoEstimado; // Sino, el más rápido
+    })
+    .slice(0, 5);
+};
+
+// Fix para iconos de Leaflet
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HOOK PWA
@@ -106,15 +369,18 @@ function usePWA() {
 export default function App() {
   const { isOnline, isInstalled, canInstall, install } = usePWA();
   
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('surbus_dark');
-    return saved !== null ? JSON.parse(saved) : true;
-  });
+  const [darkMode, setDarkMode] = useState(() =>
+    safeJsonParse(localStorage.getItem('surbus_dark'), true)
+  );
   const [activeTab, setActiveTab] = useState('cercanas');
   const [searchTerm, setSearchTerm] = useState('');
+  const deferredSearchTerm = useDeferredValue(searchTerm); // Debouncing de búsqueda
   const [selectedParada, setSelectedParada] = useState(null);
   const [selectedLinea, setSelectedLinea] = useState(null);
-  const [favoritos, setFavoritos] = useState(() => JSON.parse(localStorage.getItem('surbus_fav') || '[]'));
+  const [commuteFilterLineas, setCommuteFilterLineas] = useState(null); // Filtro de líneas desde widget casa/curro
+  const [favoritos, setFavoritos] = useState(() =>
+    safeJsonParse(localStorage.getItem('surbus_fav'), [])
+  );
   const [tiempos, setTiempos] = useState({});
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -123,6 +389,23 @@ export default function App() {
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+
+  // Estados del planificador de rutas
+  const [origenCoords, setOrigenCoords] = useState(null); // { lat, lng, nombre }
+  const [destinoCoords, setDestinoCoords] = useState(null); // { lat, lng, nombre }
+  const [rutasCalculadas, setRutasCalculadas] = useState([]);
+  const [rutaSeleccionada, setRutaSeleccionada] = useState(null);
+
+  // Estado de vista (lista o mapa)
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
+
+  // Paradas especiales: Casa y Trabajo
+  const [casaParadaId, setCasaParadaId] = useState(() =>
+    safeJsonParse(localStorage.getItem('surbus_casa'), null)
+  );
+  const [trabajoParadaId, setTrabajoParadaId] = useState(() =>
+    safeJsonParse(localStorage.getItem('surbus_trabajo'), null)
+  );
 
   // Tema
   const t = darkMode ? {
@@ -137,22 +420,41 @@ export default function App() {
     gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
   };
 
-  // Persistir
-  useEffect(() => { localStorage.setItem('surbus_dark', JSON.stringify(darkMode)); }, [darkMode]);
-  useEffect(() => { localStorage.setItem('surbus_fav', JSON.stringify(favoritos)); }, [favoritos]);
+  // Persistir localStorage con batching (una sola escritura en lugar de 4)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      localStorage.setItem('surbus_dark', JSON.stringify(darkMode));
+      localStorage.setItem('surbus_fav', JSON.stringify(favoritos));
+      localStorage.setItem('surbus_casa', JSON.stringify(casaParadaId));
+      localStorage.setItem('surbus_trabajo', JSON.stringify(trabajoParadaId));
+    }, 100); // Debounce de 100ms
+    return () => clearTimeout(timer);
+  }, [darkMode, favoritos, casaParadaId, trabajoParadaId]);
 
-  // Geolocalización
-  const getUserLocation = useCallback(() => {
-    if (!navigator.geolocation) return setLocationError('Geolocalización no soportada');
+  // Geolocalización (ejecutar solo una vez al montar)
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocalización no soportada');
+      return;
+    }
     setLoadingLocation(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => { setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setLoadingLocation(false); },
-      () => { setLocationError('No se pudo obtener ubicación'); setLoadingLocation(false); },
+      (pos) => {
+        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLoadingLocation(false);
+      },
+      (error) => {
+        const messages = {
+          [error.PERMISSION_DENIED]: 'Permiso de geolocalización denegado',
+          [error.TIMEOUT]: 'Timeout al obtener ubicación',
+          [error.POSITION_UNAVAILABLE]: 'Ubicación no disponible'
+        };
+        setLocationError(messages[error.code] || 'Error al obtener ubicación');
+        setLoadingLocation(false);
+      },
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, []);
-
-  useEffect(() => { getUserLocation(); }, [getUserLocation]);
+  }, []); // Sin dependencias - solo ejecutar una vez
 
   // Paradas ordenadas
   const paradasCercanas = useMemo(() => {
@@ -162,18 +464,72 @@ export default function App() {
     })).sort((a, b) => a.distancia - b.distancia);
   }, [userLocation]);
 
+  // Búsqueda simple y efectiva (sin Fuse.js - causaba problemas)
   const paradasFiltradas = useMemo(() => {
     const src = activeTab === 'cercanas' ? paradasCercanas : PARADAS;
-    if (!searchTerm) return src;
-    const term = searchTerm.toLowerCase();
-    return src.filter(p => 
-      p.nombre.toLowerCase().includes(term) || 
-      p.id.toString().includes(term) ||
-      p.lineas.some(l => `l${l}`.includes(term))
-    );
-  }, [searchTerm, paradasCercanas, activeTab]);
+    if (!deferredSearchTerm) return src;
 
-  // Cargar tiempos
+    const searchTermNormalized = normalizeText(deferredSearchTerm);
+    const searchWords = searchTermNormalized.split(/\s+/).filter(w => w.length > 0);
+    const resultadosMap = new Map();
+
+    // 1. Buscar por sinónimos/POI
+    searchWords.forEach(word => {
+      Object.entries(SINONIMOS_POI).forEach(([sinonimo, paradaIds]) => {
+        if (word.includes(sinonimo) || sinonimo.includes(word)) {
+          paradaIds.forEach(id => {
+            const parada = src.find(p => p.id === id);
+            if (parada) {
+              resultadosMap.set(parada.id, parada);
+            }
+          });
+        }
+      });
+    });
+
+    // 2. Búsqueda directa: cada palabra debe aparecer en alguna parte
+    src.forEach(parada => {
+      if (resultadosMap.has(parada.id)) return; // Ya encontrada por POI
+
+      const nombreNorm = normalizeText(parada.nombre);
+      const idStr = parada.id.toString();
+      const lineasStr = parada.lineas.map(l => `l${l}`).join(' ');
+
+      // Si ALGUNA palabra coincide, incluir
+      const coincide = searchWords.some(word =>
+        nombreNorm.includes(word) ||
+        idStr.includes(word) ||
+        lineasStr.includes(word)
+      );
+
+      if (coincide) {
+        resultadosMap.set(parada.id, parada);
+      }
+    });
+
+    // 3. Convertir a array
+    let resultados = Array.from(resultadosMap.values());
+
+    // 4. Ordenar por contexto
+    if (activeTab === 'cercanas' && userLocation) {
+      // En Cercanas: priorizar por distancia
+      resultados.sort((a, b) => (a.distancia || 0) - (b.distancia || 0));
+    } else if (selectedLinea) {
+      // En vista de línea: priorizar paradas de esa línea
+      resultados.sort((a, b) => {
+        const aHasLinea = a.lineas.includes(selectedLinea) ? 0 : 1;
+        const bHasLinea = b.lineas.includes(selectedLinea) ? 0 : 1;
+        return aHasLinea - bHasLinea;
+      });
+    } else {
+      // General: priorizar por número de líneas (más opciones)
+      resultados.sort((a, b) => b.lineas.length - a.lineas.length);
+    }
+
+    return resultados;
+  }, [deferredSearchTerm, paradasCercanas, activeTab, userLocation, selectedLinea]);
+
+  // Cargar tiempos con límite de caché
   const loadTiempos = useCallback(async (parada) => {
     if (!parada) return;
     setLoading(true);
@@ -181,24 +537,70 @@ export default function App() {
     await Promise.all(parada.lineas.map(async (l) => {
       nuevo[`${parada.id}-${l}`] = await fetchTiempoEspera(parada.id, l);
     }));
-    setTiempos(prev => ({ ...prev, ...nuevo }));
+
+    // Limitar caché a últimas 100 entradas para evitar memory leak
+    setTiempos(prev => {
+      const combined = { ...prev, ...nuevo };
+      const keys = Object.keys(combined);
+      if (keys.length > 100) {
+        const recentKeys = keys.slice(-100);
+        return Object.fromEntries(recentKeys.map(k => [k, combined[k]]));
+      }
+      return combined;
+    });
+
     setLastUpdate(new Date());
     setLoading(false);
   }, []);
 
+  // Auto-refresh con prevención de race conditions
   useEffect(() => {
-    if (selectedParada && isOnline) {
-      loadTiempos(selectedParada);
-      if (autoRefresh) {
-        const iv = setInterval(() => loadTiempos(selectedParada), 30000);
-        return () => clearInterval(iv);
-      }
-    }
-  }, [selectedParada, loadTiempos, autoRefresh, isOnline]);
+    if (!selectedParada || !isOnline) return;
 
-  const toggleFavorito = (id) => setFavoritos(prev => 
-    prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-  );
+    let isCancelled = false;
+
+    const loadData = async () => {
+      if (!isCancelled) {
+        await loadTiempos(selectedParada);
+      }
+    };
+
+    loadData(); // Carga inicial
+
+    let intervalId;
+    if (autoRefresh) {
+      intervalId = setInterval(loadData, 30000);
+    }
+
+    return () => {
+      isCancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [selectedParada, autoRefresh, isOnline, loadTiempos]);
+
+  // Calcular rutas cuando cambian origen/destino
+  useEffect(() => {
+    if (origenCoords && destinoCoords) {
+      const rutas = calcularRutas(origenCoords, destinoCoords);
+      setRutasCalculadas(rutas);
+      setRutaSeleccionada(rutas.length > 0 ? 0 : null); // Guardar índice en lugar de objeto
+    } else {
+      setRutasCalculadas([]);
+      setRutaSeleccionada(null);
+    }
+  }, [origenCoords, destinoCoords]);
+
+  const toggleFavorito = (id) => {
+    setFavoritos(prev => {
+      const isRemoving = prev.includes(id);
+      // Si se está quitando de favoritos, también limpiar casa/trabajo
+      if (isRemoving) {
+        if (casaParadaId === id) setCasaParadaId(null);
+        if (trabajoParadaId === id) setTrabajoParadaId(null);
+      }
+      return isRemoving ? prev.filter(x => x !== id) : [...prev, id];
+    });
+  };
 
   const formatTiempo = (tiempo) => {
     if (!tiempo?.success) return { text: 'Sin datos', color: t.textMuted };
@@ -214,12 +616,12 @@ export default function App() {
   // COMPONENTES
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const ParadaCard = ({ parada }) => (
+  const ParadaCard = ({ parada, showHomeWorkButtons = false }) => (
     <div onClick={() => setSelectedParada(parada)} style={{
       background: t.bgCard, borderRadius: 16, padding: '16px 20px', cursor: 'pointer',
       border: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14
     }}>
-      <div style={{ width: 48, height: 48, borderRadius: 12, background: t.gradient, 
+      <div style={{ width: 48, height: 48, borderRadius: 12, background: t.gradient,
         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>{parada.id}</span>
       </div>
@@ -240,18 +642,72 @@ export default function App() {
           </div>
         )}
       </div>
-      <button onClick={(e) => { e.stopPropagation(); toggleFavorito(parada.id); }} 
-        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8 }}>
-        <Heart size={22} fill={favoritos.includes(parada.id) ? '#ef4444' : 'transparent'} 
-          color={favoritos.includes(parada.id) ? '#ef4444' : t.textMuted} />
-      </button>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        {showHomeWorkButtons && (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setCasaParadaId(casaParadaId === parada.id ? null : parada.id);
+              }}
+              style={{
+                background: casaParadaId === parada.id ? t.accent : 'transparent',
+                border: `1px solid ${casaParadaId === parada.id ? t.accent : t.border}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                padding: 6,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              title="Marcar como Casa"
+            >
+              <Home size={18} color={casaParadaId === parada.id ? '#fff' : t.textMuted} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setTrabajoParadaId(trabajoParadaId === parada.id ? null : parada.id);
+              }}
+              style={{
+                background: trabajoParadaId === parada.id ? t.accent : 'transparent',
+                border: `1px solid ${trabajoParadaId === parada.id ? t.accent : t.border}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                padding: 6,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              title="Marcar como Trabajo"
+            >
+              <Briefcase size={18} color={trabajoParadaId === parada.id ? '#fff' : t.textMuted} />
+            </button>
+          </>
+        )}
+        <button onClick={(e) => { e.stopPropagation(); toggleFavorito(parada.id); }}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8 }}>
+          <Heart size={22} fill={favoritos.includes(parada.id) ? '#ef4444' : 'transparent'}
+            color={favoritos.includes(parada.id) ? '#ef4444' : t.textMuted} />
+        </button>
+      </div>
     </div>
   );
 
   const ParadaDetail = () => {
     if (!selectedParada) return null;
+
+    // Cerrar modal y limpiar filtro
+    const handleClose = () => {
+      setSelectedParada(null);
+      setCommuteFilterLineas(null);
+    };
+
+    // Determinar qué líneas mostrar
+    const lineasAMostrar = commuteFilterLineas || selectedParada.lineas;
+
     return (
-      <div onClick={() => setSelectedParada(null)} style={{
+      <div onClick={handleClose} style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)',
         zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
       }}>
@@ -265,11 +721,11 @@ export default function App() {
             <div style={{ flex: 1 }}>
               <h2 style={{ color: t.text, margin: 0, fontSize: 17, fontWeight: 700 }}>{selectedParada.nombre}</h2>
               <p style={{ color: t.textMuted, margin: '4px 0 0', fontSize: 13 }}>
-                {selectedParada.lineas.length} líneas
+                {commuteFilterLineas ? `${lineasAMostrar.length} ${lineasAMostrar.length === 1 ? 'línea útil' : 'líneas útiles'}` : `${selectedParada.lineas.length} líneas`}
                 {selectedParada.distancia !== undefined && ` • ${formatDistance(selectedParada.distancia)}`}
               </p>
             </div>
-            <button onClick={() => setSelectedParada(null)} style={{ background: t.bgCard, border: 'none', borderRadius: 12, padding: 10, cursor: 'pointer' }}>
+            <button onClick={handleClose} style={{ background: t.bgCard, border: 'none', borderRadius: 12, padding: 10, cursor: 'pointer' }}>
               <X size={20} color={t.text} />
             </button>
           </div>
@@ -311,7 +767,9 @@ export default function App() {
               {lastUpdate && <span style={{ color: t.textMuted, fontSize: 12 }}>{lastUpdate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {selectedParada.lineas.map(lineaId => {
+              {lineasAMostrar
+                .filter(lineaId => !selectedLinea || lineaId === selectedLinea)
+                .map(lineaId => {
                 const linea = getLinea(lineaId);
                 const tiempo = tiempos[`${selectedParada.id}-${lineaId}`];
                 const fmt = formatTiempo(tiempo);
@@ -370,6 +828,762 @@ export default function App() {
     </div>
   );
 
+  // Mapa genérico para Cercanas, Favoritos y Líneas
+  const GeneralMapView = ({ paradas, lineaId = null }) => {
+    // Mapa colapsado por defecto en todas las vistas
+    const [isMapExpanded, setIsMapExpanded] = useState(false);
+    // Centro inicial solo la primera vez, no en cada render
+    const [initialCenter] = useState(() =>
+      userLocation || (paradas.length > 0 ? { lat: paradas[0].lat, lng: paradas[0].lng } : { lat: 36.84, lng: -2.46 })
+    );
+    // Key estable - no cambia con selección de parada
+    const mapKey = `${activeTab}-${lineaId || 'general'}`;
+
+    // Icono personalizado para ubicación del usuario
+    const userLocationIcon = L.divIcon({
+      className: 'user-location-marker',
+      html: `
+        <div style="
+          width: 20px;
+          height: 20px;
+          background: #2196F3;
+          border: 3px solid #fff;
+          border-radius: 50%;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          position: relative;
+          left: -10px;
+          top: -10px;
+        "></div>
+      `,
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
+    });
+
+    return (
+      <div style={{ marginBottom: 16 }}>
+        <button
+          onClick={() => setIsMapExpanded(!isMapExpanded)}
+          style={{
+            width: '100%',
+            background: t.bgCard,
+            border: `1px solid ${t.border}`,
+            borderRadius: 12,
+            padding: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            color: t.text,
+            fontSize: 14,
+            fontWeight: 600
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <MapIcon size={18} color={t.accent} />
+            Ver mapa {isMapExpanded ? '' : `(${paradas.length} paradas)`}
+          </div>
+          <ChevronDown
+            size={18}
+            style={{
+              transform: isMapExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.3s ease'
+            }}
+          />
+        </button>
+
+        {isMapExpanded && (
+          <div style={{ height: 350, borderRadius: 12, overflow: 'hidden', border: `1px solid ${t.border}`, marginTop: 12 }}>
+            <MapContainer
+              key={mapKey}
+              center={[initialCenter.lat, initialCenter.lng]}
+              zoom={13}
+              style={{ height: '100%', width: '100%' }}
+              scrollWheelZoom={false}
+            >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+
+          {/* Ubicación del usuario */}
+          {userLocation && (
+            <Marker
+              position={[userLocation.lat, userLocation.lng]}
+              icon={userLocationIcon}
+            >
+              <Popup>
+                <strong>Tu ubicación</strong>
+              </Popup>
+            </Marker>
+          )}
+
+          {/* Marcadores de paradas */}
+          {paradas.map((parada) => (
+            <Marker
+              key={parada.id}
+              position={[parada.lat, parada.lng]}
+              eventHandlers={{
+                click: () => setSelectedParada(parada)
+              }}
+            >
+              <Popup>
+                <strong>{parada.nombre}</strong><br/>
+                ID: {parada.id}<br/>
+                Líneas: {parada.lineas.join(', ')}
+                {parada.distancia && <><br/>Distancia: {formatDistance(parada.distancia)}</>}
+              </Popup>
+            </Marker>
+          ))}
+            </MapContainer>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Componente de Mapa del Planificador de Rutas
+  const MapView = ({ rutas }) => {
+    const [isMapExpanded, setIsMapExpanded] = useState(false);
+    const center = origenCoords || destinoCoords || userLocation || { lat: 36.84, lng: -2.46 };
+
+    // Iconos personalizados para origen y destino
+    const origenIcon = L.divIcon({
+      className: 'origen-marker',
+      html: `
+        <div style="
+          width: 24px;
+          height: 24px;
+          background: #4CAF50;
+          border: 3px solid #fff;
+          border-radius: 50%;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          position: relative;
+          left: -12px;
+          top: -12px;
+        "></div>
+      `,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+
+    const destinoIcon = L.divIcon({
+      className: 'destino-marker',
+      html: `
+        <div style="
+          width: 24px;
+          height: 24px;
+          background: #F44336;
+          border: 3px solid #fff;
+          border-radius: 50%;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          position: relative;
+          left: -12px;
+          top: -12px;
+        "></div>
+      `,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+
+    const paradaIntermedioIcon = L.divIcon({
+      className: 'parada-intermedia-marker',
+      html: `
+        <div style="
+          width: 12px;
+          height: 12px;
+          background: #2196F3;
+          border: 2px solid #fff;
+          border-radius: 50%;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+          position: relative;
+          left: -6px;
+          top: -6px;
+        "></div>
+      `,
+      iconSize: [12, 12],
+      iconAnchor: [6, 6]
+    });
+
+    // Si no hay ruta seleccionada pero hay rutas, usar la primera
+    const rutaMostrar = rutaSeleccionada !== null && rutas[rutaSeleccionada]
+      ? rutas[rutaSeleccionada]
+      : (rutas.length > 0 ? rutas[0] : null);
+
+    return (
+      <div style={{ marginBottom: 16 }}>
+        <button
+          onClick={() => setIsMapExpanded(!isMapExpanded)}
+          style={{
+            width: '100%',
+            background: t.bgCard,
+            border: `1px solid ${t.border}`,
+            borderRadius: 12,
+            padding: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            color: t.text,
+            fontSize: 14,
+            fontWeight: 600
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <MapIcon size={18} color={t.accent} />
+            Ver mapa de ruta {rutaMostrar && `(${rutaMostrar.tipo === 'directa' ? 'directa' : 'con transbordo'})`}
+          </div>
+          <ChevronDown
+            size={18}
+            style={{
+              transform: isMapExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.3s ease'
+            }}
+          />
+        </button>
+
+        {isMapExpanded && (
+          <div style={{ height: 350, borderRadius: 12, overflow: 'hidden', border: `1px solid ${t.border}`, marginTop: 12 }}>
+            <MapContainer
+              center={[center.lat, center.lng]}
+              zoom={13}
+              style={{ height: '100%', width: '100%' }}
+              scrollWheelZoom={false}
+            >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+
+          {/* Líneas de caminar desde origen a primera parada y desde última parada a destino */}
+          {rutaMostrar && rutaMostrar.paradas.length > 0 && (
+            <>
+              {/* Línea punteada desde origen a primera parada */}
+              {origenCoords && (
+                <Polyline
+                  positions={[
+                    [origenCoords.lat, origenCoords.lng],
+                    [rutaMostrar.paradas[0].lat, rutaMostrar.paradas[0].lng]
+                  ]}
+                  color="#666"
+                  weight={2}
+                  opacity={0.6}
+                  dashArray="5, 10"
+                />
+              )}
+
+              {/* Línea del bus conectando paradas */}
+              <Polyline
+                positions={rutaMostrar.paradas.map(p => [p.lat, p.lng])}
+                color={rutaMostrar.lineas.length > 0 ? getLinea(rutaMostrar.lineas[0]).color : t.accent}
+                weight={5}
+                opacity={0.8}
+              />
+
+              {/* Línea punteada desde última parada a destino */}
+              {destinoCoords && (
+                <Polyline
+                  positions={[
+                    [rutaMostrar.paradas[rutaMostrar.paradas.length - 1].lat, rutaMostrar.paradas[rutaMostrar.paradas.length - 1].lng],
+                    [destinoCoords.lat, destinoCoords.lng]
+                  ]}
+                  color="#666"
+                  weight={2}
+                  opacity={0.6}
+                  dashArray="5, 10"
+                />
+              )}
+
+              {/* Marcadores de paradas intermedias */}
+              {rutaMostrar.paradas.map((parada, idx) => (
+                <Marker
+                  key={idx}
+                  position={[parada.lat, parada.lng]}
+                  icon={paradaIntermedioIcon}
+                >
+                  <Popup>
+                    <strong>{parada.nombre}</strong><br/>
+                    Línea {rutaMostrar.lineas[0]}
+                  </Popup>
+                </Marker>
+              ))}
+            </>
+          )}
+
+          {/* Marcadores de origen y destino (por encima de todo) */}
+          {origenCoords && (
+            <Marker
+              position={[origenCoords.lat, origenCoords.lng]}
+              icon={origenIcon}
+            >
+              <Popup><strong>🟢 Origen</strong><br/>{origenCoords.nombre}</Popup>
+            </Marker>
+          )}
+
+          {destinoCoords && (
+            <Marker
+              position={[destinoCoords.lat, destinoCoords.lng]}
+              icon={destinoIcon}
+            >
+              <Popup><strong>🔴 Destino</strong><br/>{destinoCoords.nombre}</Popup>
+            </Marker>
+          )}
+            </MapContainer>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Componente Selector de Parada
+  const LocationSelector = ({ label, value, onChange, placeholder }) => {
+    const [lugarTexto, setLugarTexto] = useState('');
+    const [searchLocal, setSearchLocal] = useState('');
+    const [showParadasDropdown, setShowParadasDropdown] = useState(false);
+
+    const paradasFiltradas = useMemo(() => {
+      if (!searchLocal) return PARADAS.slice(0, 50);
+      const term = searchLocal.toLowerCase();
+      return PARADAS.filter(p =>
+        p.nombre.toLowerCase().includes(term) ||
+        p.id.toString().includes(term)
+      ).slice(0, 20);
+    }, [searchLocal]);
+
+    // Actualizar el campo de texto cuando value cambie
+    useEffect(() => {
+      if (value && value.tipo === 'lugar') {
+        setLugarTexto(value.nombre);
+      } else if (value && value.tipo !== 'ubicacion' && value.tipo !== 'parada') {
+        setLugarTexto('');
+      }
+    }, [value]);
+
+    return (
+      <div style={{ position: 'relative' }}>
+        <label style={{ display: 'block', color: t.text, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{label}</label>
+
+        {/* Campo de texto para buscar lugar */}
+        <input
+          type="text"
+          placeholder={placeholder || "Escribe un lugar (ej: Universidad de Almería)"}
+          value={lugarTexto}
+          onChange={(e) => {
+            setLugarTexto(e.target.value);
+            if (e.target.value) {
+              onChange({ nombre: e.target.value, tipo: 'lugar' });
+            }
+          }}
+          style={{
+            width: '100%',
+            padding: '12px 14px',
+            borderRadius: 12,
+            border: `1px solid ${t.border}`,
+            background: t.bgCard,
+            color: t.text,
+            fontSize: 14,
+            outline: 'none',
+            marginBottom: 8
+          }}
+        />
+
+        {/* Botones de acceso rápido */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {/* Botón Mi ubicación */}
+          {userLocation && (
+            <button
+              onClick={() => {
+                onChange({ lat: userLocation.lat, lng: userLocation.lng, nombre: 'Mi ubicación', tipo: 'ubicacion' });
+                setLugarTexto('');
+              }}
+              style={{
+                flex: 1,
+                padding: '10px 12px',
+                borderRadius: 10,
+                border: `1px solid ${t.border}`,
+                background: value?.tipo === 'ubicacion' ? t.accent : t.bgCard,
+                color: value?.tipo === 'ubicacion' ? '#fff' : t.text,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6
+              }}
+            >
+              <Locate size={16} />
+              Mi ubicación
+            </button>
+          )}
+
+          {/* Botón Parada de autobús */}
+          <button
+            onClick={() => setShowParadasDropdown(!showParadasDropdown)}
+            style={{
+              flex: 1,
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: `1px solid ${t.border}`,
+              background: value?.tipo === 'parada' ? t.accent : t.bgCard,
+              color: value?.tipo === 'parada' ? '#fff' : t.text,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6
+            }}
+          >
+            <MapPin size={16} />
+            Parada de autobús
+          </button>
+        </div>
+
+        {/* Mostrar selección actual si es parada */}
+        {value && value.tipo === 'parada' && (
+          <div style={{
+            marginTop: 8,
+            padding: '8px 12px',
+            background: t.bgHover,
+            borderRadius: 8,
+            fontSize: 13,
+            color: t.text
+          }}>
+            <strong>Parada:</strong> {value.nombre}
+          </div>
+        )}
+
+        {/* Dropdown de paradas */}
+        {showParadasDropdown && (
+          <div style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            marginTop: 4,
+            background: t.bgCard,
+            border: `1px solid ${t.border}`,
+            borderRadius: 12,
+            maxHeight: 300,
+            overflowY: 'auto',
+            zIndex: 100,
+            boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
+          }}>
+            <div style={{ padding: 10, borderBottom: `1px solid ${t.border}`, position: 'sticky', top: 0, background: t.bgCard }}>
+              <input
+                type="text"
+                placeholder="Buscar parada..."
+                value={searchLocal}
+                onChange={(e) => setSearchLocal(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: `1px solid ${t.border}`,
+                  background: t.bg,
+                  color: t.text,
+                  fontSize: 13,
+                  outline: 'none'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div>
+              {paradasFiltradas.map(p => (
+                <div
+                  key={p.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange({ lat: p.lat, lng: p.lng, nombre: p.nombre, tipo: 'parada' });
+                    setShowParadasDropdown(false);
+                    setSearchLocal('');
+                    setLugarTexto('');
+                  }}
+                  style={{
+                    padding: '10px 14px',
+                    cursor: 'pointer',
+                    background: value?.nombre === p.nombre ? t.bgHover : 'transparent',
+                    borderBottom: `1px solid ${t.border}`
+                  }}
+                >
+                  <div style={{ color: t.text, fontSize: 13, fontWeight: 600 }}>{p.nombre}</div>
+                  <div style={{ color: t.textMuted, fontSize: 11, marginTop: 2 }}>ID: {p.id} • Líneas: {p.lineas.join(', ')}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Widget de Trayecto Casa-Trabajo
+  const CommuteWidget = () => {
+    const [currentTime, setCurrentTime] = useState(new Date());
+
+    // Actualizar la hora cada minuto
+    useEffect(() => {
+      const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+      return () => clearInterval(timer);
+    }, []);
+
+    // Determinar si es hora de ir al trabajo (6:00 - 11:00)
+    const hour = currentTime.getHours();
+    const isGoingToWork = hour >= 6 && hour < 11;
+
+    // Lógica inteligente para obtener la parada relevante (usar useMemo para evitar recálculo)
+    const { paradaId, mostrarBotonMaps, destinoParada } = useMemo(() => {
+      let pId = null;
+      let usarMaps = false;
+      let destino = null;
+
+      if (isGoingToWork) {
+        // "Al curro" → mostrar tiempos de parada CASA (coges bus en casa)
+        pId = casaParadaId;
+      } else {
+        // "A casa" → lógica inteligente
+        const paradaTrabajo = trabajoParadaId ? PARADAS.find(p => p.id === trabajoParadaId) : null;
+        const paradaCasa = casaParadaId ? PARADAS.find(p => p.id === casaParadaId) : null;
+
+        if (paradaTrabajo && userLocation && paradaCasa) {
+          // Calcular distancia al trabajo
+          const distanciaTrabajo = haversineDistance(
+            userLocation.lat, userLocation.lng,
+            paradaTrabajo.lat, paradaTrabajo.lng
+          );
+
+          if (distanciaTrabajo < 500) {
+            // Estás cerca del trabajo → mostrar tiempos de parada TRABAJO
+            pId = trabajoParadaId;
+          } else {
+            // Estás lejos del trabajo → mostrar botón Google Maps
+            usarMaps = true;
+            destino = paradaCasa;
+          }
+        } else {
+          // Fallback: mostrar parada trabajo si existe
+          pId = trabajoParadaId;
+        }
+      }
+
+      return { paradaId: pId, mostrarBotonMaps: usarMaps, destinoParada: destino };
+    }, [isGoingToWork, casaParadaId, trabajoParadaId, userLocation]);
+
+    const parada = useMemo(() =>
+      paradaId ? PARADAS.find(p => p.id === paradaId) : null
+    , [paradaId]);
+
+    // No mostrar el widget si no hay configuración
+    if (!parada && !mostrarBotonMaps) return null;
+
+    // Función para abrir Google Maps
+    const abrirGoogleMaps = () => {
+      if (userLocation && destinoParada) {
+        const origin = `${userLocation.lat},${userLocation.lng}`;
+        const destination = encodeURIComponent(`${destinoParada.nombre}, Almería`);
+        const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=transit`;
+        window.open(url, '_blank');
+      }
+    };
+
+    // Función para manejar el click en parada
+    const handleClickParada = () => {
+      if (!parada) return;
+
+      // Calcular líneas relevantes
+      let lineasRelevantes = null;
+
+      if (isGoingToWork) {
+        // Al curro: filtrar líneas comunes entre casa y trabajo
+        const paradaTrabajo = trabajoParadaId ? PARADAS.find(p => p.id === trabajoParadaId) : null;
+        if (paradaTrabajo) {
+          lineasRelevantes = parada.lineas.filter(l => paradaTrabajo.lineas.includes(l));
+        }
+      } else {
+        // A casa: filtrar líneas relevantes
+        const paradaCasa = casaParadaId ? PARADAS.find(p => p.id === casaParadaId) : null;
+        if (paradaCasa) {
+          lineasRelevantes = parada.lineas.filter(l => paradaCasa.lineas.includes(l));
+        }
+      }
+
+      setCommuteFilterLineas(lineasRelevantes);
+      setSelectedParada(parada);
+    };
+
+    return (
+      <div
+        onClick={mostrarBotonMaps ? abrirGoogleMaps : handleClickParada}
+        style={{
+          background: t.gradient,
+          borderRadius: 12,
+          padding: 12,
+          marginBottom: 12,
+          color: '#fff',
+          cursor: 'pointer',
+          transition: 'all 0.3s ease'
+        }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {isGoingToWork ? (
+            <Briefcase size={20} />
+          ) : (
+            <Home size={20} />
+          )}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>
+              {isGoingToWork ? '⏰ Al curro' : '🏠 A casa'}
+            </div>
+            <div style={{ fontSize: 11, opacity: 0.9, marginTop: 2 }}>
+              {mostrarBotonMaps ? (
+                'Tap para ver ruta en Google Maps'
+              ) : parada ? (
+                parada.nombre.length > 30 ? parada.nombre.substring(0, 30) + '...' : parada.nombre
+              ) : (
+                'Configura tus paradas'
+              )}
+            </div>
+          </div>
+          <ChevronRight size={18} />
+        </div>
+      </div>
+    );
+  };
+
+  // Vista del Planificador de Rutas
+  const RoutePlannerView = () => {
+    const generateGoogleMapsUrl = () => {
+      if (!origenCoords || !destinoCoords) return null;
+
+      // Para origen: determinar formato según tipo
+      let origin;
+      if (origenCoords.tipo === 'ubicacion') {
+        // Mi ubicación - usar coordenadas GPS
+        origin = `${origenCoords.lat},${origenCoords.lng}`;
+      } else if (origenCoords.tipo === 'parada') {
+        // Parada de autobús - usar nombre con ciudad
+        origin = encodeURIComponent(`${origenCoords.nombre}, Almería`);
+      } else {
+        // Lugar personalizado - usar el texto tal cual con ciudad
+        origin = encodeURIComponent(`${origenCoords.nombre}, Almería`);
+      }
+
+      // Para destino: determinar formato según tipo
+      let destination;
+      if (destinoCoords.tipo === 'ubicacion') {
+        // Mi ubicación - usar coordenadas GPS
+        destination = `${destinoCoords.lat},${destinoCoords.lng}`;
+      } else if (destinoCoords.tipo === 'parada') {
+        // Parada de autobús - usar nombre con ciudad
+        destination = encodeURIComponent(`${destinoCoords.nombre}, Almería`);
+      } else {
+        // Lugar personalizado - usar el texto tal cual con ciudad
+        destination = encodeURIComponent(`${destinoCoords.nombre}, Almería`);
+      }
+
+      return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=transit`;
+    };
+
+    const openGoogleMaps = () => {
+      const url = generateGoogleMapsUrl();
+      if (url) {
+        window.open(url, '_blank');
+      }
+    };
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Selectores de origen y destino */}
+        <div style={{ background: t.bgCard, borderRadius: 16, padding: 20, border: `1px solid ${t.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <MapIcon size={24} color={t.accent} />
+            <h2 style={{ margin: 0, color: t.text, fontSize: 18, fontWeight: 700 }}>Planificador de Rutas</h2>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <LocationSelector
+              label="Origen"
+              value={origenCoords}
+              onChange={setOrigenCoords}
+              placeholder="Selecciona ubicación de origen"
+            />
+
+            <LocationSelector
+              label="Destino"
+              value={destinoCoords}
+              onChange={setDestinoCoords}
+              placeholder="Selecciona ubicación de destino"
+            />
+
+            {/* Botón intercambiar */}
+            {origenCoords && destinoCoords && (
+              <button
+                onClick={() => {
+                  const temp = origenCoords;
+                  setOrigenCoords(destinoCoords);
+                  setDestinoCoords(temp);
+                }}
+                style={{
+                  background: t.bgHover, color: t.text, border: `1px solid ${t.border}`, borderRadius: 10, padding: '10px 14px',
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center'
+                }}
+              >
+                <RefreshCw size={16} />
+                Intercambiar origen y destino
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Botón para abrir Google Maps */}
+        {origenCoords && destinoCoords ? (
+          <div style={{ background: t.bgCard, borderRadius: 16, padding: 24, border: `1px solid ${t.border}`, textAlign: 'center' }}>
+            <div style={{ marginBottom: 16 }}>
+              <MapIcon size={48} color={t.accent} style={{ opacity: 0.8 }} />
+            </div>
+            <h3 style={{ margin: '0 0 8px', color: t.text, fontSize: 16, fontWeight: 700 }}>
+              Ruta lista para calcular
+            </h3>
+            <p style={{ color: t.textMuted, fontSize: 13, marginBottom: 20 }}>
+              De <span style={{ color: t.accent, fontWeight: 600 }}>{origenCoords.nombre}</span> a <span style={{ color: t.accent, fontWeight: 600 }}>{destinoCoords.nombre}</span>
+            </p>
+            <button
+              onClick={openGoogleMaps}
+              style={{
+                background: t.accent,
+                color: '#fff',
+                border: 'none',
+                borderRadius: 12,
+                padding: '14px 24px',
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 10,
+                boxShadow: `0 4px 12px ${t.accent}40`
+              }}
+            >
+              <ExternalLink size={20} />
+              Ver Ruta en Google Maps
+            </button>
+            <p style={{ color: t.textMuted, fontSize: 11, marginTop: 12 }}>
+              Se abrirá Google Maps con la ruta en transporte público
+            </p>
+          </div>
+        ) : (
+          <div style={{ background: t.bgCard, borderRadius: 16, padding: 40, textAlign: 'center', border: `1px solid ${t.border}` }}>
+            <MapIcon size={48} color={t.accent} style={{ opacity: 0.5 }} />
+            <p style={{ color: t.text, marginTop: 16, fontSize: 15 }}>Selecciona origen y destino</p>
+            <p style={{ color: t.textMuted, fontSize: 13, marginTop: 8 }}>
+              Elige ubicaciones de origen y destino para calcular la mejor ruta en transporte público con Google Maps.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
@@ -387,7 +1601,7 @@ export default function App() {
                 <Bus size={26} color="#fff" />
               </div>
               <div>
-                <h1 style={{ color: t.text, margin: 0, fontSize: 22, fontWeight: 800 }}>Surbus<span style={{ color: t.accent }}>+</span></h1>
+                <h1 style={{ color: t.text, margin: 0, fontSize: 22, fontWeight: 800 }}>Juan <span style={{ color: t.accent }}>Bus</span></h1>
                 <p style={{ color: t.textMuted, margin: 0, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                   Almería {isInstalled && <Check size={12} color={t.success} />}
                   {!isOnline && <WifiOff size={12} color={t.warning} />}
@@ -400,7 +1614,10 @@ export default function App() {
                   <Download size={20} color="#fff" />
                 </button>
               )}
-              <button onClick={() => setDarkMode(!darkMode)} style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 11, padding: 10, cursor: 'pointer' }}>
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                aria-label={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 11, padding: 10, cursor: 'pointer' }}>
                 {darkMode ? <Sun size={20} color={t.text} /> : <Moon size={20} color={t.text} />}
               </button>
             </div>
@@ -408,10 +1625,19 @@ export default function App() {
 
           <div style={{ position: 'relative' }}>
             <Search size={18} color={t.textMuted} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
-            <input type="text" placeholder="Buscar parada, número o línea..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+            <input
+              type="text"
+              placeholder="Buscar parada, número o línea..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              aria-label="Buscar paradas de autobús"
+              role="searchbox"
               style={{ width: '100%', padding: '14px 44px', borderRadius: 14, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 15, outline: 'none' }} />
             {searchTerm && (
-              <button onClick={() => setSearchTerm('')} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer' }}>
+              <button
+                onClick={() => setSearchTerm('')}
+                aria-label="Limpiar búsqueda"
+                style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer' }}>
                 <X size={18} color={t.textMuted} />
               </button>
             )}
@@ -421,12 +1647,16 @@ export default function App() {
 
       {/* Main */}
       <main style={{ maxWidth: 600, margin: '0 auto', padding: '16px 20px' }}>
+        {/* Widget Casa-Trabajo */}
+        <CommuteWidget />
+
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', paddingBottom: 4 }}>
           {[
             { id: 'cercanas', icon: Locate, label: 'Cercanas' },
             { id: 'favoritos', icon: Star, label: 'Favoritos' },
             { id: 'lineas', icon: Bus, label: 'Líneas' },
+            { id: 'rutas', icon: MapIcon, label: 'Rutas' },
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 11, border: 'none',
@@ -442,6 +1672,36 @@ export default function App() {
           ))}
         </div>
 
+        {/* Toggle Vista Lista/Mapa */}
+        {activeTab !== 'rutas' && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 16, justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => setViewMode('list')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10,
+                border: `1px solid ${t.border}`, background: viewMode === 'list' ? t.accent : t.bgCard,
+                color: viewMode === 'list' ? '#fff' : t.textMuted, fontWeight: 600, fontSize: 12,
+                cursor: 'pointer'
+              }}
+            >
+              <List size={16} />
+              Lista
+            </button>
+            <button
+              onClick={() => setViewMode('map')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10,
+                border: `1px solid ${t.border}`, background: viewMode === 'map' ? t.accent : t.bgCard,
+                color: viewMode === 'map' ? '#fff' : t.textMuted, fontWeight: 600, fontSize: 12,
+                cursor: 'pointer'
+              }}
+            >
+              <MapIcon size={16} />
+              Mapa
+            </button>
+          </div>
+        )}
+
         {/* Content */}
         {activeTab === 'cercanas' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -456,11 +1716,13 @@ export default function App() {
                 <Locate size={32} style={{ animation: 'spin 2s linear infinite' }} />
                 <p style={{ marginTop: 12 }}>Obteniendo ubicación...</p>
               </div>
-            ) : (
+            ) : viewMode === 'list' ? (
               <>
                 <p style={{ color: t.textMuted, fontSize: 13, margin: '0 0 4px' }}>{paradasFiltradas.length} paradas</p>
                 {paradasFiltradas.slice(0, 50).map(p => <ParadaCard key={p.id} parada={p} />)}
               </>
+            ) : (
+              <GeneralMapView paradas={paradasFiltradas.slice(0, 100)} />
             )}
           </div>
         )}
@@ -472,13 +1734,41 @@ export default function App() {
                 <Heart size={48} strokeWidth={1} style={{ opacity: 0.5 }} />
                 <p style={{ marginTop: 16 }}>No tienes favoritos</p>
               </div>
+            ) : viewMode === 'list' ? (
+              PARADAS.filter(p => favoritos.includes(p.id)).map(p => <ParadaCard key={p.id} parada={p} showHomeWorkButtons={true} />)
             ) : (
-              PARADAS.filter(p => favoritos.includes(p.id)).map(p => <ParadaCard key={p.id} parada={p} />)
+              <GeneralMapView paradas={PARADAS.filter(p => favoritos.includes(p.id))} />
             )}
           </div>
         )}
 
-        {activeTab === 'lineas' && <LineasView />}
+        {activeTab === 'lineas' && (viewMode === 'list' ? <LineasView /> : (
+          selectedLinea ? (
+            <GeneralMapView
+              paradas={PARADAS.filter(p => p.lineas.includes(selectedLinea))}
+              lineaId={selectedLinea}
+            />
+          ) : (
+            <div style={{ background: t.bgCard, borderRadius: 16, padding: 40, textAlign: 'center', border: `1px solid ${t.border}` }}>
+              <MapIcon size={48} color={t.accent} style={{ opacity: 0.5 }} />
+              <p style={{ color: t.text, marginTop: 16, fontSize: 15 }}>Selecciona una línea</p>
+              <p style={{ color: t.textMuted, fontSize: 13, marginTop: 8 }}>
+                Cambia a vista de lista para seleccionar una línea y ver su recorrido en el mapa.
+              </p>
+              <button
+                onClick={() => setViewMode('list')}
+                style={{
+                  marginTop: 16, background: t.accent, color: '#fff', border: 'none', borderRadius: 10,
+                  padding: '10px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Ir a vista de lista
+              </button>
+            </div>
+          )
+        ))}
+
+        {activeTab === 'rutas' && <RoutePlannerView />}
       </main>
 
       {selectedParada && <ParadaDetail />}
@@ -490,7 +1780,7 @@ export default function App() {
             {isOnline ? <Wifi size={14} color={t.success} /> : <WifiOff size={14} color={t.danger} />}
             <span style={{ color: t.textMuted, fontSize: 11 }}>{isOnline ? 'Online' : 'Offline'}</span>
           </div>
-          <span style={{ color: t.textMuted, fontSize: 11 }}>Surbus+ v2.0 {isInstalled && '✓'}</span>
+          <span style={{ color: t.textMuted, fontSize: 11 }}>Juan Bus v2.0 {isInstalled && '✓'}</span>
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 {
-  "name": "surbus-plus",
+  "name": "juan-bus",
   "version": "2.0.0",
   "description": "PWA de transporte público de Almería",
   "type": "module",
@@ -12,14 +12,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.263.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "lucide-react": "^0.263.1"
+    "react-leaflet": "^4.2.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
     "vite": "^5.0.0",
-    "vite-plugin-pwa": "^0.17.4",
-    "concurrently": "^8.2.2"
+    "vite-plugin-pwa": "^0.17.4"
   }
 }
