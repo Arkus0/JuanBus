@@ -1,0 +1,6 @@
+[
+  {"id": 6, "nombre": "Paseo-Delegación de Gobierno", "lat": 36.8358, "lng": -2.4668, "lineas": [1]},
+  {"id": 479, "nombre": "Hermanos Machado", "lat": 36.8368, "lng": -2.4602, "lineas": [1]},
+  {"id": 506, "nombre": "Plaza del Carmen", "lat": 36.8384, "lng": -2.4698, "lineas": [1]},
+  {"id": 507, "nombre": "Plaza de la Administración Vieja", "lat": 36.8380, "lng": -2.4692, "lineas": [1]}
+]

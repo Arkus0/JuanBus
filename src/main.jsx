@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import 'leaflet/dist/leaflet.css';
 
 // Registrar SW manualmente si es necesario (vite-plugin-pwa lo hace automático)
 if ('serviceWorker' in navigator) {
