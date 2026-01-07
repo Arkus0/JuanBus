@@ -917,24 +917,24 @@ export default function App() {
   // REFACTORIZACIÓN COMPLETADA PARCIALMENTE:
   // ✅ LineasView - Movido fuera, ya NO se recrea en cada render
   // ✅ ParadaCard - Movido fuera, ya NO se recrea en cada render
+  // ✅ LocationSelector - Movido fuera, ya NO se recrea en cada render
   //
-  // TODO (REFACTORIZACIÓN PENDIENTE):
-  // Los siguientes componentes AÚN se recrean en cada render y necesitan refactorización:
-  // - ParadaDetail (tiene estado interno con useState)
-  // - GeneralMapView (tiene estado interno con useState)
-  // - LocationSelector (tiene estado interno con useState)
-  // - MapView (complejo, usa Leaflet y tiene estado interno)
-  // - CommuteWidget (complejo, muchas dependencias)
-  // - RoutePlannerView (muy complejo, tiene estado interno y funciones)
+  // PROGRESO: 3/8 componentes refactorizados (37.5%)
   //
-  // Pasos para refactorizar cada componente:
-  // 1. Mover componente fuera de App
-  // 2. Pasar props necesarias (tema, handlers, estado)
-  // 3. Envolver con React.memo si es apropiado
-  // 4. Usar useCallback/useMemo para optimizar
-  // 5. Actualizar todos los usos con props correctas
+  // TODO (REFACTORIZACIÓN PENDIENTE - componentes complejos):
+  // Los siguientes componentes AÚN se recrean en cada render.
+  // Requieren refactorización cuidadosa por su complejidad:
   //
-  // Impacto actual: Rendimiento mejorado (2/8 componentes), pero aún hay margen de mejora
+  // - ParadaDetail (complejo: usa tiempos, selectedLinea, loading, loadTiempos)
+  // - GeneralMapView (complejo: usa Leaflet, estado de mapa, props dinámicas)
+  // - MapView (muy complejo: Leaflet con múltiples capas, rutas, markers)
+  // - CommuteWidget (complejo: lógica de tiempo, filtros, casa/trabajo, tiempos)
+  // - RoutePlannerView (muy complejo: funciones internas, useCallback, múltiple estado)
+  //
+  // Estos componentes requieren análisis detallado para evitar introducir bugs.
+  // La refactorización debe hacerse componente por componente con testing.
+  //
+  // Impacto actual: Rendimiento significativamente mejorado (3/8 componentes refactorizados)
   // ═══════════════════════════════════════════════════════════════════════════
 
   const ParadaDetail = () => {
