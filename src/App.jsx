@@ -1224,7 +1224,6 @@ export default function App() {
   // Widget de Trayecto Casa-Trabajo
   const CommuteWidget = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
-    const [isExpanded, setIsExpanded] = useState(false);
 
     // Actualizar la hora cada minuto
     useEffect(() => {
@@ -1290,34 +1289,21 @@ export default function App() {
       paradaId ? PARADAS.find(p => p.id === paradaId) : null
     , [paradaId]);
 
-    // Cargar tiempos automáticamente cuando se expande o cambia la parada
-    useEffect(() => {
-      if (isExpanded && paradaId && isOnline) {
-        const paradaActual = PARADAS.find(p => p.id === paradaId);
-        if (paradaActual) {
-          loadTiempos(paradaActual);
-        }
-      }
-    }, [isExpanded, paradaId, isOnline, loadTiempos]);
-
     // No mostrar el widget si no hay parada configurada
     if (!parada) return null;
 
-    // Obtener las líneas de la parada y sus tiempos
-    const lineasParada = parada.lineas.slice(0, 3); // Primeras 3 líneas
-    const tiemposParada = lineasParada.map(lineaId => ({
-      lineaId,
-      linea: getLinea(lineaId),
-      tiempo: tiempos[`${parada.id}-${lineaId}`] // Clave corregida: parada-linea
-    }));
+    // Función para manejar el click: navegar directamente a la parada
+    const handleClick = () => {
+      setSelectedParada(parada);
+    };
 
     return (
       <div
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={handleClick}
         style={{
           background: t.gradient,
           borderRadius: 12,
-          padding: isExpanded ? 16 : 12,
+          padding: 12,
           marginBottom: 12,
           color: '#fff',
           cursor: 'pointer',
@@ -1333,108 +1319,13 @@ export default function App() {
             <div style={{ fontSize: 14, fontWeight: 700 }}>
               {isGoingToWork ? '⏰ Al curro' : '🏠 A casa'}
             </div>
-            {!isExpanded && (
-              <div style={{ fontSize: 11, opacity: 0.9, marginTop: 2 }}>
-                {parada.nombre.length > 25 ? parada.nombre.substring(0, 25) + '...' : parada.nombre}
-              </div>
-            )}
-          </div>
-          <ChevronDown
-            size={18}
-            style={{
-              transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.3s ease'
-            }}
-          />
-        </div>
-
-        {isExpanded && (
-          <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 12 }}>
-            <p style={{ margin: '0 0 12px 0', fontSize: 13, opacity: 0.9 }}>
-              {parada.nombre}
-            </p>
-
-            {/* Indicador de ruta dinámica */}
-            {esRutaDinamica && rutaCalculada && (
-              <div style={{
-                background: 'rgba(255,255,255,0.2)',
-                borderRadius: 8,
-                padding: '8px 10px',
-                marginBottom: 12,
-                fontSize: 11,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6
-              }}>
-                <Navigation size={14} />
-                <span>Ruta calculada • {formatDistance(rutaCalculada.distanciaAndando)} andando</span>
-              </div>
-            )}
-
-            {/* Tiempos de las líneas */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {tiemposParada.map(({ lineaId, linea, tiempo }) => (
-                <div
-                  key={lineaId}
-                  style={{
-                    background: 'rgba(255,255,255,0.15)',
-                    borderRadius: 8,
-                    padding: '8px 12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{
-                      background: linea.color,
-                      color: '#fff',
-                      padding: '3px 8px',
-                      borderRadius: 5,
-                      fontSize: 11,
-                      fontWeight: 700
-                    }}>
-                      L{lineaId}
-                    </span>
-                    <span style={{ fontSize: 12, fontWeight: 500 }}>
-                      {linea.nombre}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>
-                    {tiempo ? tiempo : '—'}
-                  </div>
-                </div>
-              ))}
+            <div style={{ fontSize: 11, opacity: 0.9, marginTop: 2 }}>
+              {parada.nombre.length > 30 ? parada.nombre.substring(0, 30) + '...' : parada.nombre}
+              {esRutaDinamica && <span style={{ marginLeft: 6 }}>• Ruta calculada</span>}
             </div>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                loadTiempos(parada);
-              }}
-              disabled={loading || !isOnline}
-              style={{
-                marginTop: 10,
-                width: '100%',
-                background: 'rgba(255,255,255,0.2)',
-                border: 'none',
-                borderRadius: 8,
-                padding: '8px 12px',
-                color: '#fff',
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: loading || !isOnline ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6
-              }}
-            >
-              <RefreshCw size={14} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-              {loading ? 'Actualizando...' : 'Actualizar'}
-            </button>
           </div>
-        )}
+          <ChevronRight size={18} />
+        </div>
       </div>
     );
   };
