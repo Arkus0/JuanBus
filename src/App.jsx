@@ -8,6 +8,13 @@ import {
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
+// Datos y utilidades
+import { PARADAS, LINEAS, SINONIMOS_POI, getLinea } from './data';
+import { haversineDistance, formatDistance, normalizeText, safeJsonParse, safeLocalStorage, formatTiempo } from './utils/helpers';
+import { fetchTiempoEspera } from './utils/api';
+import { calcularRutas } from './utils/routeCalculator';
+import { usePWA } from './hooks/usePWA';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // DATOS DE SURBUS ALMERÍA
 // ═══════════════════════════════════════════════════════════════════════════
@@ -114,6 +121,27 @@ const safeJsonParse = (value, fallback) => {
   }
 };
 
+// LocalStorage helpers seguros
+const safeLocalStorage = {
+  getItem: (key, fallback = null) => {
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      console.warn(`Error leyendo localStorage key "${key}":`, e);
+      return fallback;
+    }
+  },
+  setItem: (key, value) => {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch (e) {
+      console.warn(`Error escribiendo localStorage key "${key}":`, e);
+      return false;
+    }
+  }
+};
+
 // formatTiempo movido fuera del componente para evitar recreación
 const formatTiempo = (tiempo, theme) => {
   if (!tiempo?.success) return { text: 'Sin datos', color: theme.textMuted };
@@ -128,19 +156,39 @@ const formatTiempo = (tiempo, theme) => {
 // API usando el proxy de Vercel (evita CORS)
 const API_BASE = '/api/surbus';
 
-const fetchTiempoEspera = async (paradaId, lineaId) => {
+const fetchTiempoEspera = async (paradaId, lineaId, retries = 2) => {
+  const timeout = 8000; // 8 segundos timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
   try {
-    const res = await fetch(`${API_BASE}?l=${lineaId}&bs=${paradaId}`);
+    const res = await fetch(`${API_BASE}?l=${lineaId}&bs=${paradaId}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
+
     const data = await res.json();
     if (!data.success && data.error) {
       return { success: false, error: data.error };
     }
     return data;
   } catch (e) {
-    return { success: false, error: e.message };
+    clearTimeout(timeoutId);
+
+    // Retry logic para errores de red (no para errores 4xx/5xx)
+    if (retries > 0 && (e.name === 'AbortError' || e.name === 'TypeError')) {
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Esperar 1s antes de reintentar
+      return fetchTiempoEspera(paradaId, lineaId, retries - 1);
+    }
+
+    return {
+      success: false,
+      error: e.name === 'AbortError' ? 'Timeout al obtener tiempos' : e.message
+    };
   }
 };
 
@@ -370,7 +418,7 @@ export default function App() {
   const { isOnline, isInstalled, canInstall, install } = usePWA();
   
   const [darkMode, setDarkMode] = useState(() =>
-    safeJsonParse(localStorage.getItem('surbus_dark'), true)
+    safeJsonParse(safeLocalStorage.getItem('surbus_dark'), true)
   );
   const [activeTab, setActiveTab] = useState('cercanas');
   const [searchTerm, setSearchTerm] = useState('');
@@ -379,7 +427,7 @@ export default function App() {
   const [selectedLinea, setSelectedLinea] = useState(null);
   const [commuteFilterLineas, setCommuteFilterLineas] = useState(null); // Filtro de líneas desde widget casa/curro
   const [favoritos, setFavoritos] = useState(() =>
-    safeJsonParse(localStorage.getItem('surbus_fav'), [])
+    safeJsonParse(safeLocalStorage.getItem('surbus_fav'), [])
   );
   const [tiempos, setTiempos] = useState({});
   const [loading, setLoading] = useState(false);
@@ -401,10 +449,10 @@ export default function App() {
 
   // Paradas especiales: Casa y Trabajo
   const [casaParadaId, setCasaParadaId] = useState(() =>
-    safeJsonParse(localStorage.getItem('surbus_casa'), null)
+    safeJsonParse(safeLocalStorage.getItem('surbus_casa'), null)
   );
   const [trabajoParadaId, setTrabajoParadaId] = useState(() =>
-    safeJsonParse(localStorage.getItem('surbus_trabajo'), null)
+    safeJsonParse(safeLocalStorage.getItem('surbus_trabajo'), null)
   );
 
   // Tema
@@ -423,10 +471,10 @@ export default function App() {
   // Persistir localStorage con batching (una sola escritura en lugar de 4)
   useEffect(() => {
     const timer = setTimeout(() => {
-      localStorage.setItem('surbus_dark', JSON.stringify(darkMode));
-      localStorage.setItem('surbus_fav', JSON.stringify(favoritos));
-      localStorage.setItem('surbus_casa', JSON.stringify(casaParadaId));
-      localStorage.setItem('surbus_trabajo', JSON.stringify(trabajoParadaId));
+      safeLocalStorage.setItem('surbus_dark', JSON.stringify(darkMode));
+      safeLocalStorage.setItem('surbus_fav', JSON.stringify(favoritos));
+      safeLocalStorage.setItem('surbus_casa', JSON.stringify(casaParadaId));
+      safeLocalStorage.setItem('surbus_trabajo', JSON.stringify(trabajoParadaId));
     }, 100); // Debounce de 100ms
     return () => clearTimeout(timer);
   }, [darkMode, favoritos, casaParadaId, trabajoParadaId]);
@@ -437,23 +485,34 @@ export default function App() {
       setLocationError('Geolocalización no soportada');
       return;
     }
+
+    let isMounted = true; // Flag para prevenir actualizaciones después de desmontar
     setLoadingLocation(true);
+
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setLoadingLocation(false);
+        if (isMounted) {
+          setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setLoadingLocation(false);
+        }
       },
       (error) => {
-        const messages = {
-          [error.PERMISSION_DENIED]: 'Permiso de geolocalización denegado',
-          [error.TIMEOUT]: 'Timeout al obtener ubicación',
-          [error.POSITION_UNAVAILABLE]: 'Ubicación no disponible'
-        };
-        setLocationError(messages[error.code] || 'Error al obtener ubicación');
-        setLoadingLocation(false);
+        if (isMounted) {
+          const messages = {
+            [error.PERMISSION_DENIED]: 'Permiso de geolocalización denegado',
+            [error.TIMEOUT]: 'Timeout al obtener ubicación',
+            [error.POSITION_UNAVAILABLE]: 'Ubicación no disponible'
+          };
+          setLocationError(messages[error.code] || 'Error al obtener ubicación');
+          setLoadingLocation(false);
+        }
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
+
+    return () => {
+      isMounted = false; // Cleanup: marcar como desmontado
+    };
   }, []); // Sin dependencias - solo ejecutar una vez
 
   // Paradas ordenadas
@@ -529,28 +588,37 @@ export default function App() {
     return resultados;
   }, [deferredSearchTerm, paradasCercanas, activeTab, userLocation, selectedLinea]);
 
-  // Cargar tiempos con límite de caché
+  // Cargar tiempos con límite de caché y prevención de race condition
   const loadTiempos = useCallback(async (parada) => {
     if (!parada) return;
+    const requestId = `${parada.id}-${Date.now()}`; // ID único para esta request
     setLoading(true);
+
     const nuevo = {};
     await Promise.all(parada.lineas.map(async (l) => {
       nuevo[`${parada.id}-${l}`] = await fetchTiempoEspera(parada.id, l);
     }));
 
-    // Limitar caché a últimas 100 entradas para evitar memory leak
-    setTiempos(prev => {
-      const combined = { ...prev, ...nuevo };
-      const keys = Object.keys(combined);
-      if (keys.length > 100) {
-        const recentKeys = keys.slice(-100);
-        return Object.fromEntries(recentKeys.map(k => [k, combined[k]]));
+    // Solo actualizar si esta request es para la parada aún seleccionada
+    setSelectedParada(currentParada => {
+      if (currentParada?.id === parada.id) {
+        // Limitar caché a últimas 100 entradas para evitar memory leak
+        setTiempos(prev => {
+          const combined = { ...prev, ...nuevo };
+          const keys = Object.keys(combined);
+          if (keys.length > 100) {
+            const recentKeys = keys.slice(-100);
+            return Object.fromEntries(recentKeys.map(k => [k, combined[k]]));
+          }
+          return combined;
+        });
+        setLastUpdate(new Date());
+        setLoading(false);
+      } else {
+        setLoading(false); // Cancelar loading si la parada cambió
       }
-      return combined;
+      return currentParada;
     });
-
-    setLastUpdate(new Date());
-    setLoading(false);
   }, []);
 
   // Auto-refresh con prevención de race conditions
@@ -590,27 +658,17 @@ export default function App() {
     }
   }, [origenCoords, destinoCoords]);
 
-  const toggleFavorito = (id) => {
+  const toggleFavorito = useCallback((id) => {
     setFavoritos(prev => {
       const isRemoving = prev.includes(id);
       // Si se está quitando de favoritos, también limpiar casa/trabajo
       if (isRemoving) {
-        if (casaParadaId === id) setCasaParadaId(null);
-        if (trabajoParadaId === id) setTrabajoParadaId(null);
+        setCasaParadaId(current => current === id ? null : current);
+        setTrabajoParadaId(current => current === id ? null : current);
       }
       return isRemoving ? prev.filter(x => x !== id) : [...prev, id];
     });
-  };
-
-  const formatTiempo = (tiempo) => {
-    if (!tiempo?.success) return { text: 'Sin datos', color: t.textMuted };
-    if (!tiempo.waitTimeString) return { text: tiempo.waitTimeType === 3 ? 'Sin servicio' : '...', color: t.textMuted };
-    const mins = parseInt(tiempo.waitTimeString);
-    if (isNaN(mins)) return { text: tiempo.waitTimeString, color: t.accent };
-    if (mins <= 3) return { text: `${mins} min`, color: t.success };
-    if (mins <= 10) return { text: `${mins} min`, color: t.warning };
-    return { text: `${mins} min`, color: t.danger };
-  };
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // COMPONENTES
@@ -772,7 +830,7 @@ export default function App() {
                 .map(lineaId => {
                 const linea = getLinea(lineaId);
                 const tiempo = tiempos[`${selectedParada.id}-${lineaId}`];
-                const fmt = formatTiempo(tiempo);
+                const fmt = formatTiempo(tiempo, t);
                 return linea && (
                   <div key={lineaId} style={{ background: t.bgCard, borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, border: `1px solid ${t.border}` }}>
                     <div style={{ width: 44, height: 44, borderRadius: 11, background: linea.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
