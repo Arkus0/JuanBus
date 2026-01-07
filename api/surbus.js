@@ -5,17 +5,27 @@
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  
+
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  const { l: lineaNum, bs: paradaNum } = req.query;
+  // Validación y sanitización de parámetros
+  const lineaNum = parseInt(req.query.l);
+  const paradaNum = parseInt(req.query.bs);
 
-  if (!lineaNum || !paradaNum) {
-    return res.status(400).json({ 
-      success: false, 
-      error: 'Faltan parámetros l (línea) y bs (parada)' 
+  if (!lineaNum || !paradaNum || isNaN(lineaNum) || isNaN(paradaNum)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Faltan parámetros l (línea) y bs (parada)'
+    });
+  }
+
+  // Validar rangos válidos
+  if (lineaNum < 1 || lineaNum > 31 || paradaNum < 1 || paradaNum > 514) {
+    return res.status(400).json({
+      success: false,
+      error: 'Parámetros fuera de rango válido'
     });
   }
 
@@ -54,8 +64,10 @@ export default async function handler(req, res) {
 
     // 2. Buscar los GUIDs para esta parada
     // Formato: ConfigureButton("busStopButton0_X", "lineGuid", "busStopGuid", "lineBusStopGuid", state, paradaNum, nodeType)
+    // Sanitizar paradaNum para evitar ReDoS (ya validado como número entero arriba)
+    const paradaNumSafe = String(paradaNum);
     const regex = new RegExp(
-      `ConfigureButton\\s*\\(\\s*"[^"]+",\\s*"([^"]+)",\\s*"([^"]+)",\\s*"([^"]+)",\\s*\\d+,\\s*${paradaNum},\\s*(\\d+)\\s*\\)`,
+      `ConfigureButton\\s*\\(\\s*"[^"]+",\\s*"([^"]+)",\\s*"([^"]+)",\\s*"([^"]+)",\\s*\\d+,\\s*${paradaNumSafe},\\s*(\\d+)\\s*\\)`,
       'i'
     );
     

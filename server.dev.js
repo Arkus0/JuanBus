@@ -31,18 +31,25 @@ const server = http.createServer(async (req, res) => {
   }
 
   const url = new URL(req.url, `http://localhost:${PORT}`);
-  
+
   if (!url.pathname.startsWith('/api/surbus')) {
     res.writeHead(404);
     return res.end(JSON.stringify({ error: 'Not found' }));
   }
 
-  const lineaNum = url.searchParams.get('l');
-  const paradaNum = url.searchParams.get('bs');
+  // Validación y sanitización de parámetros
+  const lineaNum = parseInt(url.searchParams.get('l'));
+  const paradaNum = parseInt(url.searchParams.get('bs'));
 
-  if (!lineaNum || !paradaNum) {
+  if (!lineaNum || !paradaNum || isNaN(lineaNum) || isNaN(paradaNum)) {
     res.writeHead(400);
     return res.end(JSON.stringify({ success: false, error: 'Faltan parámetros l y bs' }));
+  }
+
+  // Validar rangos válidos
+  if (lineaNum < 1 || lineaNum > 31 || paradaNum < 1 || paradaNum > 514) {
+    res.writeHead(400);
+    return res.end(JSON.stringify({ success: false, error: 'Parámetros fuera de rango válido' }));
   }
 
   console.log(`[PROXY] Línea ${lineaNum}, Parada ${paradaNum}`);
@@ -72,8 +79,10 @@ const server = http.createServer(async (req, res) => {
     console.log(`[PROXY] Sesión: ${sessionId.substring(0, 8)}...`);
 
     // 2. Extraer GUIDs
+    // Sanitizar paradaNum para evitar ReDoS (ya validado como número entero arriba)
+    const paradaNumSafe = String(paradaNum);
     const regex = new RegExp(
-      `ConfigureButton\\s*\\(\\s*"[^"]+",\\s*"([^"]+)",\\s*"([^"]+)",\\s*"([^"]+)",\\s*\\d+,\\s*${paradaNum},\\s*(\\d+)\\s*\\)`,
+      `ConfigureButton\\s*\\(\\s*"[^"]+",\\s*"([^"]+)",\\s*"([^"]+)",\\s*"([^"]+)",\\s*\\d+,\\s*${paradaNumSafe},\\s*(\\d+)\\s*\\)`,
       'i'
     );
     
