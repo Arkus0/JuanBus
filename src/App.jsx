@@ -1247,10 +1247,10 @@ export default function App() {
     const isGoingToWork = hour >= 6 && hour < 11;
 
     // Lógica inteligente para obtener la parada relevante (usar useMemo para evitar recálculo)
-    const { paradaId, rutaCalculada, esRutaDinamica } = useMemo(() => {
+    const { paradaId, mostrarBotonMaps, destinoParada } = useMemo(() => {
       let pId = null;
-      let ruta = null;
-      let dinamica = false;
+      let usarMaps = false;
+      let destino = null;
 
       if (isGoingToWork) {
         // "Al curro" → mostrar tiempos de parada CASA (coges bus en casa)
@@ -1271,21 +1271,9 @@ export default function App() {
             // Estás cerca del trabajo → mostrar tiempos de parada TRABAJO
             pId = trabajoParadaId;
           } else {
-            // Estás lejos del trabajo → calcular ruta a casa
-            const rutas = calcularRutas(
-              userLocation,
-              { lat: paradaCasa.lat, lng: paradaCasa.lng }
-            );
-
-            if (rutas.length > 0) {
-              ruta = rutas[0]; // Primera ruta (recomendada)
-              // Extraer parada origen de la ruta
-              const primeraParada = ruta.paradas?.[0];
-              if (primeraParada && primeraParada.id) {
-                pId = primeraParada.id; // Usar el ID, no el objeto completo
-                dinamica = true;
-              }
-            }
+            // Estás lejos del trabajo → mostrar botón Google Maps
+            usarMaps = true;
+            destino = paradaCasa;
           }
         } else {
           // Fallback: mostrar parada trabajo si existe
@@ -1293,36 +1281,43 @@ export default function App() {
         }
       }
 
-      return { paradaId: pId, rutaCalculada: ruta, esRutaDinamica: dinamica };
+      return { paradaId: pId, mostrarBotonMaps: usarMaps, destinoParada: destino };
     }, [isGoingToWork, casaParadaId, trabajoParadaId, userLocation]);
 
     const parada = useMemo(() =>
       paradaId ? PARADAS.find(p => p.id === paradaId) : null
     , [paradaId]);
 
-    // No mostrar el widget si no hay parada configurada
-    if (!parada) return null;
+    // No mostrar el widget si no hay configuración
+    if (!parada && !mostrarBotonMaps) return null;
 
-    // Función para manejar el click: navegar directamente a la parada
-    const handleClick = () => {
-      // Calcular líneas relevantes según el contexto
+    // Función para abrir Google Maps
+    const abrirGoogleMaps = () => {
+      if (userLocation && destinoParada) {
+        const origin = `${userLocation.lat},${userLocation.lng}`;
+        const destination = encodeURIComponent(`${destinoParada.nombre}, Almería`);
+        const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=transit`;
+        window.open(url, '_blank');
+      }
+    };
+
+    // Función para manejar el click en parada
+    const handleClickParada = () => {
+      if (!parada) return;
+
+      // Calcular líneas relevantes
       let lineasRelevantes = null;
 
       if (isGoingToWork) {
         // Al curro: filtrar líneas comunes entre casa y trabajo
         const paradaTrabajo = trabajoParadaId ? PARADAS.find(p => p.id === trabajoParadaId) : null;
         if (paradaTrabajo) {
-          // Líneas que están tanto en casa como en trabajo
           lineasRelevantes = parada.lineas.filter(l => paradaTrabajo.lineas.includes(l));
         }
       } else {
         // A casa: filtrar líneas relevantes
         const paradaCasa = casaParadaId ? PARADAS.find(p => p.id === casaParadaId) : null;
-        if (esRutaDinamica && rutaCalculada) {
-          // Si es ruta dinámica, usar las líneas de la ruta
-          lineasRelevantes = rutaCalculada.lineas || null;
-        } else if (paradaCasa) {
-          // Líneas comunes entre trabajo y casa
+        if (paradaCasa) {
           lineasRelevantes = parada.lineas.filter(l => paradaCasa.lineas.includes(l));
         }
       }
@@ -1333,7 +1328,7 @@ export default function App() {
 
     return (
       <div
-        onClick={handleClick}
+        onClick={mostrarBotonMaps ? abrirGoogleMaps : handleClickParada}
         style={{
           background: t.gradient,
           borderRadius: 12,
@@ -1354,8 +1349,16 @@ export default function App() {
               {isGoingToWork ? '⏰ Al curro' : '🏠 A casa'}
             </div>
             <div style={{ fontSize: 11, opacity: 0.9, marginTop: 2 }}>
-              {parada.nombre.length > 30 ? parada.nombre.substring(0, 30) + '...' : parada.nombre}
-              {esRutaDinamica && <span style={{ marginLeft: 6 }}>• Ruta calculada</span>}
+              {mostrarBotonMaps ? (
+                'Tap para ver ruta en Google Maps'
+              ) : parada ? (
+                <>
+                  {parada.nombre.length > 30 ? parada.nombre.substring(0, 30) + '...' : parada.nombre}
+                  {esRutaDinamica && <span style={{ marginLeft: 6 }}>• Ruta calculada</span>}
+                </>
+              ) : (
+                'Configura tus paradas'
+              )}
             </div>
           </div>
           <ChevronRight size={18} />
