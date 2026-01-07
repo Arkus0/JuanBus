@@ -420,23 +420,13 @@ export default function App() {
     gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
   };
 
-  // Persistir localStorage con batching (una sola escritura en lugar de 4)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      localStorage.setItem('surbus_dark', JSON.stringify(darkMode));
-      localStorage.setItem('surbus_fav', JSON.stringify(favoritos));
-      localStorage.setItem('surbus_casa', JSON.stringify(casaParadaId));
-      localStorage.setItem('surbus_trabajo', JSON.stringify(trabajoParadaId));
-    }, 100); // Debounce de 100ms
-    return () => clearTimeout(timer);
-  }, [darkMode, favoritos, casaParadaId, trabajoParadaId]);
-
-  // Geolocalización (ejecutar solo una vez al montar)
-  useEffect(() => {
+  // Función de geolocalización (puede ser llamada desde el botón "Reintentar")
+  const getUserLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setLocationError('Geolocalización no soportada');
       return;
     }
+    setLocationError(null); // Limpiar error previo
     setLoadingLocation(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -454,7 +444,23 @@ export default function App() {
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, []); // Sin dependencias - solo ejecutar una vez
+  }, []);
+
+  // Persistir localStorage con batching (una sola escritura en lugar de 4)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      localStorage.setItem('surbus_dark', JSON.stringify(darkMode));
+      localStorage.setItem('surbus_fav', JSON.stringify(favoritos));
+      localStorage.setItem('surbus_casa', JSON.stringify(casaParadaId));
+      localStorage.setItem('surbus_trabajo', JSON.stringify(trabajoParadaId));
+    }, 100); // Debounce de 100ms
+    return () => clearTimeout(timer);
+  }, [darkMode, favoritos, casaParadaId, trabajoParadaId]);
+
+  // Geolocalización (ejecutar solo una vez al montar)
+  useEffect(() => {
+    getUserLocation();
+  }, [getUserLocation]);
 
   // Paradas ordenadas
   const paradasCercanas = useMemo(() => {
@@ -590,7 +596,7 @@ export default function App() {
     }
   }, [origenCoords, destinoCoords]);
 
-  const toggleFavorito = (id) => {
+  const toggleFavorito = useCallback((id) => {
     setFavoritos(prev => {
       const isRemoving = prev.includes(id);
       // Si se está quitando de favoritos, también limpiar casa/trabajo
@@ -600,20 +606,26 @@ export default function App() {
       }
       return isRemoving ? prev.filter(x => x !== id) : [...prev, id];
     });
-  };
-
-  const formatTiempo = (tiempo) => {
-    if (!tiempo?.success) return { text: 'Sin datos', color: t.textMuted };
-    if (!tiempo.waitTimeString) return { text: tiempo.waitTimeType === 3 ? 'Sin servicio' : '...', color: t.textMuted };
-    const mins = parseInt(tiempo.waitTimeString);
-    if (isNaN(mins)) return { text: tiempo.waitTimeString, color: t.accent };
-    if (mins <= 3) return { text: `${mins} min`, color: t.success };
-    if (mins <= 10) return { text: `${mins} min`, color: t.warning };
-    return { text: `${mins} min`, color: t.danger };
-  };
+  }, [casaParadaId, trabajoParadaId]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // COMPONENTES
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // ⚠️ PROBLEMA CRÍTICO DE RENDIMIENTO:
+  // Todos los componentes definidos aquí se recrean en CADA render del componente App.
+  // Esto causa re-renders masivos innecesarios y degradación severa del rendimiento.
+  //
+  // TODO (REFACTORIZACIÓN URGENTE):
+  // - Mover todos estos componentes FUERA del componente App
+  // - Pasarles las props necesarias (tema, handlers, estado)
+  // - Envolver con React.memo donde sea apropiado
+  // - Usar useCallback para todas las funciones que se pasen como props
+  //
+  // Componentes afectados: ParadaCard, ParadaDetail, LineasView, GeneralMapView,
+  // MapView, LocationSelector, CommuteWidget, RoutePlannerView
+  //
+  // Impacto actual: Rendimiento severamente degradado, pérdida de optimizaciones de React
   // ═══════════════════════════════════════════════════════════════════════════
 
   const ParadaCard = ({ parada, showHomeWorkButtons = false }) => (
@@ -772,7 +784,7 @@ export default function App() {
                 .map(lineaId => {
                 const linea = getLinea(lineaId);
                 const tiempo = tiempos[`${selectedParada.id}-${lineaId}`];
-                const fmt = formatTiempo(tiempo);
+                const fmt = formatTiempo(tiempo, t);
                 return linea && (
                   <div key={lineaId} style={{ background: t.bgCard, borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, border: `1px solid ${t.border}` }}>
                     <div style={{ width: 44, height: 44, borderRadius: 11, background: linea.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1452,7 +1464,7 @@ export default function App() {
 
   // Vista del Planificador de Rutas
   const RoutePlannerView = () => {
-    const generateGoogleMapsUrl = () => {
+    const generateGoogleMapsUrl = useCallback(() => {
       if (!origenCoords || !destinoCoords) return null;
 
       // Para origen: determinar formato según tipo
@@ -1482,14 +1494,14 @@ export default function App() {
       }
 
       return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=transit`;
-    };
+    }, [origenCoords, destinoCoords]);
 
-    const openGoogleMaps = () => {
+    const openGoogleMaps = useCallback(() => {
       const url = generateGoogleMapsUrl();
       if (url) {
         window.open(url, '_blank');
       }
-    };
+    }, [generateGoogleMapsUrl]);
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
