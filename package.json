@@ -21,6 +21,8 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^8.2.2",
+    "jsdom": "^27.4.0",
+    "node-fetch": "^3.3.2",
     "vite": "^5.0.0",
     "vite-plugin-pwa": "^0.17.4"
   }
