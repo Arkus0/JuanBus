@@ -1369,8 +1369,15 @@ export default function App() {
     const generateGoogleMapsUrl = () => {
       if (!origenCoords || !destinoCoords) return null;
 
-      const origin = `${origenCoords.lat},${origenCoords.lng}`;
-      const destination = `${destinoCoords.lat},${destinoCoords.lng}`;
+      // Para origen: si es "Mi ubicación" usar coordenadas, si no usar nombre de parada
+      const origin = origenCoords.nombre === 'Mi ubicación'
+        ? `${origenCoords.lat},${origenCoords.lng}`
+        : encodeURIComponent(`${origenCoords.nombre}, Almería`);
+
+      // Para destino: si es "Mi ubicación" usar coordenadas, si no usar nombre de parada
+      const destination = destinoCoords.nombre === 'Mi ubicación'
+        ? `${destinoCoords.lat},${destinoCoords.lng}`
+        : encodeURIComponent(`${destinoCoords.nombre}, Almería`);
 
       return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=transit`;
     };
