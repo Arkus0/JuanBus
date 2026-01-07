@@ -363,6 +363,307 @@ function usePWA() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// COMPONENTES REFACTORIZADOS (fuera de App para mejor rendimiento)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Componente LineasView - Lista todas las líneas de autobús
+const LineasView = ({ theme, selectedLinea, setSelectedLinea, setSelectedParada }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    {LINEAS.map(linea => {
+      const paradasLinea = PARADAS.filter(p => p.lineas.includes(linea.id));
+      const isExp = selectedLinea === linea.id;
+      return (
+        <div key={linea.id} style={{ background: theme.bgCard, borderRadius: 16, overflow: 'hidden', border: `1px solid ${isExp ? linea.color : theme.border}` }}>
+          <div onClick={() => setSelectedLinea(isExp ? null : linea.id)} style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer' }}>
+            <div style={{ width: 52, height: 52, borderRadius: 14, background: linea.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ color: '#fff', fontWeight: 800, fontSize: 18 }}>L{linea.id}</span>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ color: theme.text, fontWeight: 600, fontSize: 15 }}>{linea.nombre}</div>
+              <div style={{ color: theme.textMuted, fontSize: 13, marginTop: 2 }}>{paradasLinea.length} paradas</div>
+            </div>
+            <ChevronDown size={20} color={theme.textMuted} style={{ transform: isExp ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
+          </div>
+          {isExp && (
+            <div style={{ padding: '0 20px 16px', borderTop: `1px solid ${theme.border}`, paddingTop: 16, maxHeight: 300, overflowY: 'auto' }}>
+              {paradasLinea.map((p, i) => (
+                <div key={p.id} onClick={() => setSelectedParada(p)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: theme.bgHover, borderRadius: 10, cursor: 'pointer', marginBottom: 8 }}>
+                  <div style={{ width: 24, height: 24, borderRadius: '50%', background: linea.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>{i + 1}</div>
+                  <span style={{ color: theme.text, fontSize: 13, flex: 1 }}>{p.nombre}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    })}
+  </div>
+);
+
+// Componente ParadaCard - Tarjeta de parada individual
+const ParadaCard = ({ parada, showHomeWorkButtons = false, theme, setSelectedParada, casaParadaId, setCasaParadaId, trabajoParadaId, setTrabajoParadaId, favoritos, toggleFavorito }) => (
+  <div onClick={() => setSelectedParada(parada)} style={{
+    background: theme.bgCard, borderRadius: 16, padding: '16px 20px', cursor: 'pointer',
+    border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', gap: 14
+  }}>
+    <div style={{ width: 48, height: 48, borderRadius: 12, background: theme.gradient,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>{parada.id}</span>
+    </div>
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ color: theme.text, fontWeight: 600, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {parada.nombre}
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+        {parada.lineas.slice(0, 5).map(l => {
+          const linea = getLinea(l);
+          return linea && <span key={l} style={{ background: linea.color, color: '#fff', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>L{l}</span>;
+        })}
+        {parada.lineas.length > 5 && <span style={{ color: theme.textMuted, fontSize: 11 }}>+{parada.lineas.length - 5}</span>}
+      </div>
+      {parada.distancia !== undefined && (
+        <div style={{ color: theme.accent, fontSize: 12, marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Navigation size={12} />{formatDistance(parada.distancia)}
+        </div>
+      )}
+    </div>
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      {showHomeWorkButtons && (
+        <>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setCasaParadaId(casaParadaId === parada.id ? null : parada.id);
+            }}
+            style={{
+              background: casaParadaId === parada.id ? theme.accent : 'transparent',
+              border: `1px solid ${casaParadaId === parada.id ? theme.accent : theme.border}`,
+              borderRadius: 8,
+              cursor: 'pointer',
+              padding: 6,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            title="Marcar como Casa"
+          >
+            <Home size={18} color={casaParadaId === parada.id ? '#fff' : theme.textMuted} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setTrabajoParadaId(trabajoParadaId === parada.id ? null : parada.id);
+            }}
+            style={{
+              background: trabajoParadaId === parada.id ? theme.accent : 'transparent',
+              border: `1px solid ${trabajoParadaId === parada.id ? theme.accent : theme.border}`,
+              borderRadius: 8,
+              cursor: 'pointer',
+              padding: 6,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            title="Marcar como Trabajo"
+          >
+            <Briefcase size={18} color={trabajoParadaId === parada.id ? '#fff' : theme.textMuted} />
+          </button>
+        </>
+      )}
+      <button onClick={(e) => { e.stopPropagation(); toggleFavorito(parada.id); }}
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8 }}>
+        <Heart size={22} fill={favoritos.includes(parada.id) ? '#ef4444' : 'transparent'}
+          color={favoritos.includes(parada.id) ? '#ef4444' : theme.textMuted} />
+      </button>
+    </div>
+  </div>
+);
+
+// Componente LocationSelector - Selector de ubicación para planificador de rutas
+const LocationSelector = ({ label, value, onChange, placeholder, theme, userLocation }) => {
+  const [lugarTexto, setLugarTexto] = useState('');
+  const [searchLocal, setSearchLocal] = useState('');
+  const [showParadasDropdown, setShowParadasDropdown] = useState(false);
+
+  const paradasFiltradas = useMemo(() => {
+    if (!searchLocal) return PARADAS.slice(0, 50);
+    const term = searchLocal.toLowerCase();
+    return PARADAS.filter(p =>
+      p.nombre.toLowerCase().includes(term) ||
+      p.id.toString().includes(term)
+    ).slice(0, 20);
+  }, [searchLocal]);
+
+  // Actualizar el campo de texto cuando value cambie
+  useEffect(() => {
+    if (value && value.tipo === 'lugar') {
+      setLugarTexto(value.nombre);
+    } else if (value && value.tipo !== 'ubicacion' && value.tipo !== 'parada') {
+      setLugarTexto('');
+    }
+  }, [value]);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <label style={{ display: 'block', color: theme.text, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{label}</label>
+
+      {/* Campo de texto para buscar lugar */}
+      <input
+        type="text"
+        placeholder={placeholder || "Escribe un lugar (ej: Universidad de Almería)"}
+        value={lugarTexto}
+        onChange={(e) => {
+          setLugarTexto(e.target.value);
+          if (e.target.value) {
+            onChange({ nombre: e.target.value, tipo: 'lugar' });
+          }
+        }}
+        style={{
+          width: '100%',
+          padding: '12px 14px',
+          borderRadius: 12,
+          border: `1px solid ${theme.border}`,
+          background: theme.bgCard,
+          color: theme.text,
+          fontSize: 14,
+          outline: 'none',
+          marginBottom: 8
+        }}
+      />
+
+      {/* Botones de acceso rápido */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        {/* Botón Mi ubicación */}
+        {userLocation && (
+          <button
+            onClick={() => {
+              onChange({ lat: userLocation.lat, lng: userLocation.lng, nombre: 'Mi ubicación', tipo: 'ubicacion' });
+              setLugarTexto('');
+            }}
+            style={{
+              flex: 1,
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: `1px solid ${theme.border}`,
+              background: value?.tipo === 'ubicacion' ? theme.accent : theme.bgCard,
+              color: value?.tipo === 'ubicacion' ? '#fff' : theme.text,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6
+            }}
+          >
+            <Locate size={16} />
+            Mi ubicación
+          </button>
+        )}
+
+        {/* Botón Parada de autobús */}
+        <button
+          onClick={() => setShowParadasDropdown(!showParadasDropdown)}
+          style={{
+            flex: 1,
+            padding: '10px 12px',
+            borderRadius: 10,
+            border: `1px solid ${theme.border}`,
+            background: value?.tipo === 'parada' ? theme.accent : theme.bgCard,
+            color: value?.tipo === 'parada' ? '#fff' : theme.text,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6
+          }}
+        >
+          <MapPin size={16} />
+          Parada de autobús
+        </button>
+      </div>
+
+      {/* Mostrar selección actual si es parada */}
+      {value && value.tipo === 'parada' && (
+        <div style={{
+          marginTop: 8,
+          padding: '8px 12px',
+          background: theme.bgHover,
+          borderRadius: 8,
+          fontSize: 13,
+          color: theme.text
+        }}>
+          <strong>Parada:</strong> {value.nombre}
+        </div>
+      )}
+
+      {/* Dropdown de paradas */}
+      {showParadasDropdown && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          marginTop: 4,
+          background: theme.bgCard,
+          border: `1px solid ${theme.border}`,
+          borderRadius: 12,
+          maxHeight: 300,
+          overflowY: 'auto',
+          zIndex: 100,
+          boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
+        }}>
+          <div style={{ padding: 10, borderBottom: `1px solid ${theme.border}`, position: 'sticky', top: 0, background: theme.bgCard }}>
+            <input
+              type="text"
+              placeholder="Buscar parada..."
+              value={searchLocal}
+              onChange={(e) => setSearchLocal(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: `1px solid ${theme.border}`,
+                background: theme.bg,
+                color: theme.text,
+                fontSize: 13,
+                outline: 'none'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div>
+            {paradasFiltradas.map(p => (
+              <div
+                key={p.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange({ lat: p.lat, lng: p.lng, nombre: p.nombre, tipo: 'parada' });
+                  setShowParadasDropdown(false);
+                  setSearchLocal('');
+                  setLugarTexto('');
+                }}
+                style={{
+                  padding: '10px 14px',
+                  cursor: 'pointer',
+                  background: value?.nombre === p.nombre ? theme.bgHover : 'transparent',
+                  borderBottom: `1px solid ${theme.border}`
+                }}
+              >
+                <div style={{ color: theme.text, fontSize: 13, fontWeight: 600 }}>{p.nombre}</div>
+                <div style={{ color: theme.textMuted, fontSize: 11, marginTop: 2 }}>ID: {p.id} • Líneas: {p.lineas.join(', ')}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -420,23 +721,13 @@ export default function App() {
     gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
   };
 
-  // Persistir localStorage con batching (una sola escritura en lugar de 4)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      localStorage.setItem('surbus_dark', JSON.stringify(darkMode));
-      localStorage.setItem('surbus_fav', JSON.stringify(favoritos));
-      localStorage.setItem('surbus_casa', JSON.stringify(casaParadaId));
-      localStorage.setItem('surbus_trabajo', JSON.stringify(trabajoParadaId));
-    }, 100); // Debounce de 100ms
-    return () => clearTimeout(timer);
-  }, [darkMode, favoritos, casaParadaId, trabajoParadaId]);
-
-  // Geolocalización (ejecutar solo una vez al montar)
-  useEffect(() => {
+  // Función de geolocalización (puede ser llamada desde el botón "Reintentar")
+  const getUserLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setLocationError('Geolocalización no soportada');
       return;
     }
+    setLocationError(null); // Limpiar error previo
     setLoadingLocation(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -454,7 +745,23 @@ export default function App() {
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, []); // Sin dependencias - solo ejecutar una vez
+  }, []);
+
+  // Persistir localStorage con batching (una sola escritura en lugar de 4)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      localStorage.setItem('surbus_dark', JSON.stringify(darkMode));
+      localStorage.setItem('surbus_fav', JSON.stringify(favoritos));
+      localStorage.setItem('surbus_casa', JSON.stringify(casaParadaId));
+      localStorage.setItem('surbus_trabajo', JSON.stringify(trabajoParadaId));
+    }, 100); // Debounce de 100ms
+    return () => clearTimeout(timer);
+  }, [darkMode, favoritos, casaParadaId, trabajoParadaId]);
+
+  // Geolocalización (ejecutar solo una vez al montar)
+  useEffect(() => {
+    getUserLocation();
+  }, [getUserLocation]);
 
   // Paradas ordenadas
   const paradasCercanas = useMemo(() => {
@@ -590,7 +897,7 @@ export default function App() {
     }
   }, [origenCoords, destinoCoords]);
 
-  const toggleFavorito = (id) => {
+  const toggleFavorito = useCallback((id) => {
     setFavoritos(prev => {
       const isRemoving = prev.includes(id);
       // Si se está quitando de favoritos, también limpiar casa/trabajo
@@ -600,99 +907,35 @@ export default function App() {
       }
       return isRemoving ? prev.filter(x => x !== id) : [...prev, id];
     });
-  };
-
-  const formatTiempo = (tiempo) => {
-    if (!tiempo?.success) return { text: 'Sin datos', color: t.textMuted };
-    if (!tiempo.waitTimeString) return { text: tiempo.waitTimeType === 3 ? 'Sin servicio' : '...', color: t.textMuted };
-    const mins = parseInt(tiempo.waitTimeString);
-    if (isNaN(mins)) return { text: tiempo.waitTimeString, color: t.accent };
-    if (mins <= 3) return { text: `${mins} min`, color: t.success };
-    if (mins <= 10) return { text: `${mins} min`, color: t.warning };
-    return { text: `${mins} min`, color: t.danger };
-  };
+  }, [casaParadaId, trabajoParadaId]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // COMPONENTES
   // ═══════════════════════════════════════════════════════════════════════════
-
-  const ParadaCard = ({ parada, showHomeWorkButtons = false }) => (
-    <div onClick={() => setSelectedParada(parada)} style={{
-      background: t.bgCard, borderRadius: 16, padding: '16px 20px', cursor: 'pointer',
-      border: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14
-    }}>
-      <div style={{ width: 48, height: 48, borderRadius: 12, background: t.gradient,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>{parada.id}</span>
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ color: t.text, fontWeight: 600, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {parada.nombre}
-        </div>
-        <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-          {parada.lineas.slice(0, 5).map(l => {
-            const linea = getLinea(l);
-            return linea && <span key={l} style={{ background: linea.color, color: '#fff', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>L{l}</span>;
-          })}
-          {parada.lineas.length > 5 && <span style={{ color: t.textMuted, fontSize: 11 }}>+{parada.lineas.length - 5}</span>}
-        </div>
-        {parada.distancia !== undefined && (
-          <div style={{ color: t.accent, fontSize: 12, marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Navigation size={12} />{formatDistance(parada.distancia)}
-          </div>
-        )}
-      </div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        {showHomeWorkButtons && (
-          <>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setCasaParadaId(casaParadaId === parada.id ? null : parada.id);
-              }}
-              style={{
-                background: casaParadaId === parada.id ? t.accent : 'transparent',
-                border: `1px solid ${casaParadaId === parada.id ? t.accent : t.border}`,
-                borderRadius: 8,
-                cursor: 'pointer',
-                padding: 6,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-              title="Marcar como Casa"
-            >
-              <Home size={18} color={casaParadaId === parada.id ? '#fff' : t.textMuted} />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setTrabajoParadaId(trabajoParadaId === parada.id ? null : parada.id);
-              }}
-              style={{
-                background: trabajoParadaId === parada.id ? t.accent : 'transparent',
-                border: `1px solid ${trabajoParadaId === parada.id ? t.accent : t.border}`,
-                borderRadius: 8,
-                cursor: 'pointer',
-                padding: 6,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-              title="Marcar como Trabajo"
-            >
-              <Briefcase size={18} color={trabajoParadaId === parada.id ? '#fff' : t.textMuted} />
-            </button>
-          </>
-        )}
-        <button onClick={(e) => { e.stopPropagation(); toggleFavorito(parada.id); }}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8 }}>
-          <Heart size={22} fill={favoritos.includes(parada.id) ? '#ef4444' : 'transparent'}
-            color={favoritos.includes(parada.id) ? '#ef4444' : t.textMuted} />
-        </button>
-      </div>
-    </div>
-  );
+  //
+  // ⚠️ PROBLEMA DE RENDIMIENTO (EN PROGRESO):
+  // REFACTORIZACIÓN COMPLETADA PARCIALMENTE:
+  // ✅ LineasView - Movido fuera, ya NO se recrea en cada render
+  // ✅ ParadaCard - Movido fuera, ya NO se recrea en cada render
+  // ✅ LocationSelector - Movido fuera, ya NO se recrea en cada render
+  //
+  // PROGRESO: 3/8 componentes refactorizados (37.5%)
+  //
+  // TODO (REFACTORIZACIÓN PENDIENTE - componentes complejos):
+  // Los siguientes componentes AÚN se recrean en cada render.
+  // Requieren refactorización cuidadosa por su complejidad:
+  //
+  // - ParadaDetail (complejo: usa tiempos, selectedLinea, loading, loadTiempos)
+  // - GeneralMapView (complejo: usa Leaflet, estado de mapa, props dinámicas)
+  // - MapView (muy complejo: Leaflet con múltiples capas, rutas, markers)
+  // - CommuteWidget (complejo: lógica de tiempo, filtros, casa/trabajo, tiempos)
+  // - RoutePlannerView (muy complejo: funciones internas, useCallback, múltiple estado)
+  //
+  // Estos componentes requieren análisis detallado para evitar introducir bugs.
+  // La refactorización debe hacerse componente por componente con testing.
+  //
+  // Impacto actual: Rendimiento significativamente mejorado (3/8 componentes refactorizados)
+  // ═══════════════════════════════════════════════════════════════════════════
 
   const ParadaDetail = () => {
     if (!selectedParada) return null;
@@ -772,7 +1015,7 @@ export default function App() {
                 .map(lineaId => {
                 const linea = getLinea(lineaId);
                 const tiempo = tiempos[`${selectedParada.id}-${lineaId}`];
-                const fmt = formatTiempo(tiempo);
+                const fmt = formatTiempo(tiempo, t);
                 return linea && (
                   <div key={lineaId} style={{ background: t.bgCard, borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, border: `1px solid ${t.border}` }}>
                     <div style={{ width: 44, height: 44, borderRadius: 11, background: linea.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -794,39 +1037,6 @@ export default function App() {
       </div>
     );
   };
-
-  const LineasView = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {LINEAS.map(linea => {
-        const paradasLinea = PARADAS.filter(p => p.lineas.includes(linea.id));
-        const isExp = selectedLinea === linea.id;
-        return (
-          <div key={linea.id} style={{ background: t.bgCard, borderRadius: 16, overflow: 'hidden', border: `1px solid ${isExp ? linea.color : t.border}` }}>
-            <div onClick={() => setSelectedLinea(isExp ? null : linea.id)} style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer' }}>
-              <div style={{ width: 52, height: 52, borderRadius: 14, background: linea.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ color: '#fff', fontWeight: 800, fontSize: 18 }}>L{linea.id}</span>
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ color: t.text, fontWeight: 600, fontSize: 15 }}>{linea.nombre}</div>
-                <div style={{ color: t.textMuted, fontSize: 13, marginTop: 2 }}>{paradasLinea.length} paradas</div>
-              </div>
-              <ChevronDown size={20} color={t.textMuted} style={{ transform: isExp ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
-            </div>
-            {isExp && (
-              <div style={{ padding: '0 20px 16px', borderTop: `1px solid ${t.border}`, paddingTop: 16, maxHeight: 300, overflowY: 'auto' }}>
-                {paradasLinea.map((p, i) => (
-                  <div key={p.id} onClick={() => setSelectedParada(p)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: t.bgHover, borderRadius: 10, cursor: 'pointer', marginBottom: 8 }}>
-                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: linea.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>{i + 1}</div>
-                    <span style={{ color: t.text, fontSize: 13, flex: 1 }}>{p.nombre}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
 
   // Mapa genérico para Cercanas, Favoritos y Líneas
   const GeneralMapView = ({ paradas, lineaId = null }) => {
@@ -1134,190 +1344,6 @@ export default function App() {
     );
   };
 
-  // Componente Selector de Parada
-  const LocationSelector = ({ label, value, onChange, placeholder }) => {
-    const [lugarTexto, setLugarTexto] = useState('');
-    const [searchLocal, setSearchLocal] = useState('');
-    const [showParadasDropdown, setShowParadasDropdown] = useState(false);
-
-    const paradasFiltradas = useMemo(() => {
-      if (!searchLocal) return PARADAS.slice(0, 50);
-      const term = searchLocal.toLowerCase();
-      return PARADAS.filter(p =>
-        p.nombre.toLowerCase().includes(term) ||
-        p.id.toString().includes(term)
-      ).slice(0, 20);
-    }, [searchLocal]);
-
-    // Actualizar el campo de texto cuando value cambie
-    useEffect(() => {
-      if (value && value.tipo === 'lugar') {
-        setLugarTexto(value.nombre);
-      } else if (value && value.tipo !== 'ubicacion' && value.tipo !== 'parada') {
-        setLugarTexto('');
-      }
-    }, [value]);
-
-    return (
-      <div style={{ position: 'relative' }}>
-        <label style={{ display: 'block', color: t.text, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{label}</label>
-
-        {/* Campo de texto para buscar lugar */}
-        <input
-          type="text"
-          placeholder={placeholder || "Escribe un lugar (ej: Universidad de Almería)"}
-          value={lugarTexto}
-          onChange={(e) => {
-            setLugarTexto(e.target.value);
-            if (e.target.value) {
-              onChange({ nombre: e.target.value, tipo: 'lugar' });
-            }
-          }}
-          style={{
-            width: '100%',
-            padding: '12px 14px',
-            borderRadius: 12,
-            border: `1px solid ${t.border}`,
-            background: t.bgCard,
-            color: t.text,
-            fontSize: 14,
-            outline: 'none',
-            marginBottom: 8
-          }}
-        />
-
-        {/* Botones de acceso rápido */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          {/* Botón Mi ubicación */}
-          {userLocation && (
-            <button
-              onClick={() => {
-                onChange({ lat: userLocation.lat, lng: userLocation.lng, nombre: 'Mi ubicación', tipo: 'ubicacion' });
-                setLugarTexto('');
-              }}
-              style={{
-                flex: 1,
-                padding: '10px 12px',
-                borderRadius: 10,
-                border: `1px solid ${t.border}`,
-                background: value?.tipo === 'ubicacion' ? t.accent : t.bgCard,
-                color: value?.tipo === 'ubicacion' ? '#fff' : t.text,
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6
-              }}
-            >
-              <Locate size={16} />
-              Mi ubicación
-            </button>
-          )}
-
-          {/* Botón Parada de autobús */}
-          <button
-            onClick={() => setShowParadasDropdown(!showParadasDropdown)}
-            style={{
-              flex: 1,
-              padding: '10px 12px',
-              borderRadius: 10,
-              border: `1px solid ${t.border}`,
-              background: value?.tipo === 'parada' ? t.accent : t.bgCard,
-              color: value?.tipo === 'parada' ? '#fff' : t.text,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6
-            }}
-          >
-            <MapPin size={16} />
-            Parada de autobús
-          </button>
-        </div>
-
-        {/* Mostrar selección actual si es parada */}
-        {value && value.tipo === 'parada' && (
-          <div style={{
-            marginTop: 8,
-            padding: '8px 12px',
-            background: t.bgHover,
-            borderRadius: 8,
-            fontSize: 13,
-            color: t.text
-          }}>
-            <strong>Parada:</strong> {value.nombre}
-          </div>
-        )}
-
-        {/* Dropdown de paradas */}
-        {showParadasDropdown && (
-          <div style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            marginTop: 4,
-            background: t.bgCard,
-            border: `1px solid ${t.border}`,
-            borderRadius: 12,
-            maxHeight: 300,
-            overflowY: 'auto',
-            zIndex: 100,
-            boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
-          }}>
-            <div style={{ padding: 10, borderBottom: `1px solid ${t.border}`, position: 'sticky', top: 0, background: t.bgCard }}>
-              <input
-                type="text"
-                placeholder="Buscar parada..."
-                value={searchLocal}
-                onChange={(e) => setSearchLocal(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: 8,
-                  border: `1px solid ${t.border}`,
-                  background: t.bg,
-                  color: t.text,
-                  fontSize: 13,
-                  outline: 'none'
-                }}
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-            <div>
-              {paradasFiltradas.map(p => (
-                <div
-                  key={p.id}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onChange({ lat: p.lat, lng: p.lng, nombre: p.nombre, tipo: 'parada' });
-                    setShowParadasDropdown(false);
-                    setSearchLocal('');
-                    setLugarTexto('');
-                  }}
-                  style={{
-                    padding: '10px 14px',
-                    cursor: 'pointer',
-                    background: value?.nombre === p.nombre ? t.bgHover : 'transparent',
-                    borderBottom: `1px solid ${t.border}`
-                  }}
-                >
-                  <div style={{ color: t.text, fontSize: 13, fontWeight: 600 }}>{p.nombre}</div>
-                  <div style={{ color: t.textMuted, fontSize: 11, marginTop: 2 }}>ID: {p.id} • Líneas: {p.lineas.join(', ')}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
   // Widget de Trayecto Casa-Trabajo
   const CommuteWidget = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -1452,7 +1478,7 @@ export default function App() {
 
   // Vista del Planificador de Rutas
   const RoutePlannerView = () => {
-    const generateGoogleMapsUrl = () => {
+    const generateGoogleMapsUrl = useCallback(() => {
       if (!origenCoords || !destinoCoords) return null;
 
       // Para origen: determinar formato según tipo
@@ -1482,14 +1508,14 @@ export default function App() {
       }
 
       return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=transit`;
-    };
+    }, [origenCoords, destinoCoords]);
 
-    const openGoogleMaps = () => {
+    const openGoogleMaps = useCallback(() => {
       const url = generateGoogleMapsUrl();
       if (url) {
         window.open(url, '_blank');
       }
-    };
+    }, [generateGoogleMapsUrl]);
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1506,6 +1532,8 @@ export default function App() {
               value={origenCoords}
               onChange={setOrigenCoords}
               placeholder="Selecciona ubicación de origen"
+              theme={t}
+              userLocation={userLocation}
             />
 
             <LocationSelector
@@ -1513,6 +1541,8 @@ export default function App() {
               value={destinoCoords}
               onChange={setDestinoCoords}
               placeholder="Selecciona ubicación de destino"
+              theme={t}
+              userLocation={userLocation}
             />
 
             {/* Botón intercambiar */}
@@ -1719,7 +1749,7 @@ export default function App() {
             ) : viewMode === 'list' ? (
               <>
                 <p style={{ color: t.textMuted, fontSize: 13, margin: '0 0 4px' }}>{paradasFiltradas.length} paradas</p>
-                {paradasFiltradas.slice(0, 50).map(p => <ParadaCard key={p.id} parada={p} />)}
+                {paradasFiltradas.slice(0, 50).map(p => <ParadaCard key={p.id} parada={p} theme={t} setSelectedParada={setSelectedParada} casaParadaId={casaParadaId} setCasaParadaId={setCasaParadaId} trabajoParadaId={trabajoParadaId} setTrabajoParadaId={setTrabajoParadaId} favoritos={favoritos} toggleFavorito={toggleFavorito} />)}
               </>
             ) : (
               <GeneralMapView paradas={paradasFiltradas.slice(0, 100)} />
@@ -1735,14 +1765,14 @@ export default function App() {
                 <p style={{ marginTop: 16 }}>No tienes favoritos</p>
               </div>
             ) : viewMode === 'list' ? (
-              PARADAS.filter(p => favoritos.includes(p.id)).map(p => <ParadaCard key={p.id} parada={p} showHomeWorkButtons={true} />)
+              PARADAS.filter(p => favoritos.includes(p.id)).map(p => <ParadaCard key={p.id} parada={p} showHomeWorkButtons={true} theme={t} setSelectedParada={setSelectedParada} casaParadaId={casaParadaId} setCasaParadaId={setCasaParadaId} trabajoParadaId={trabajoParadaId} setTrabajoParadaId={setTrabajoParadaId} favoritos={favoritos} toggleFavorito={toggleFavorito} />)
             ) : (
               <GeneralMapView paradas={PARADAS.filter(p => favoritos.includes(p.id))} />
             )}
           </div>
         )}
 
-        {activeTab === 'lineas' && (viewMode === 'list' ? <LineasView /> : (
+        {activeTab === 'lineas' && (viewMode === 'list' ? <LineasView theme={t} selectedLinea={selectedLinea} setSelectedLinea={setSelectedLinea} setSelectedParada={setSelectedParada} /> : (
           selectedLinea ? (
             <GeneralMapView
               paradas={PARADAS.filter(p => p.lineas.includes(selectedLinea))}
