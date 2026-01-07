@@ -663,6 +663,108 @@ const LocationSelector = ({ label, value, onChange, placeholder, theme, userLoca
   );
 };
 
+// Componente ParadaDetail - Modal de detalle de parada con tiempos en tiempo real
+const ParadaDetail = ({ selectedParada, setSelectedParada, commuteFilterLineas, setCommuteFilterLineas, theme, isOnline, loading, loadTiempos, favoritos, toggleFavorito, lastUpdate, selectedLinea, tiempos }) => {
+  if (!selectedParada) return null;
+
+  // Cerrar modal y limpiar filtro
+  const handleClose = () => {
+    setSelectedParada(null);
+    setCommuteFilterLineas(null);
+  };
+
+  // Determinar qué líneas mostrar
+  const lineasAMostrar = commuteFilterLineas || selectedParada.lineas;
+
+  return (
+    <div onClick={handleClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)',
+      zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: theme.bg, borderRadius: '24px 24px 0 0', width: '100%', maxWidth: 500, maxHeight: '90vh', overflow: 'auto'
+      }}>
+        <div style={{ position: 'sticky', top: 0, background: theme.bg, padding: '20px 24px', borderBottom: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', gap: 16, zIndex: 10 }}>
+          <div style={{ width: 56, height: 56, borderRadius: 14, background: theme.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ color: '#fff', fontWeight: 800, fontSize: 18 }}>{selectedParada.id}</span>
+          </div>
+          <div style={{ flex: 1 }}>
+            <h2 style={{ color: theme.text, margin: 0, fontSize: 17, fontWeight: 700 }}>{selectedParada.nombre}</h2>
+            <p style={{ color: theme.textMuted, margin: '4px 0 0', fontSize: 13 }}>
+              {commuteFilterLineas ? `${lineasAMostrar.length} ${lineasAMostrar.length === 1 ? 'línea útil' : 'líneas útiles'}` : `${selectedParada.lineas.length} líneas`}
+              {selectedParada.distancia !== undefined && ` • ${formatDistance(selectedParada.distancia)}`}
+            </p>
+          </div>
+          <button onClick={handleClose} style={{ background: theme.bgCard, border: 'none', borderRadius: 12, padding: 10, cursor: 'pointer' }}>
+            <X size={20} color={theme.text} />
+          </button>
+        </div>
+
+        {!isOnline && (
+          <div style={{ margin: '16px 24px 0', padding: '12px 16px', background: `${theme.warning}20`, borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <CloudOff size={18} color={theme.warning} />
+            <span style={{ color: theme.text, fontSize: 13 }}>Sin conexión</span>
+          </div>
+        )}
+
+        <div style={{ padding: '16px 24px', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={() => loadTiempos(selectedParada)} disabled={loading || !isOnline} style={{
+            flex: '1 1 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            background: isOnline ? theme.accent : theme.textMuted, color: '#fff', border: 'none', borderRadius: 12,
+            padding: '12px 16px', fontWeight: 600, fontSize: 14, cursor: loading || !isOnline ? 'not-allowed' : 'pointer'
+          }}>
+            <RefreshCw size={18} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+            {loading ? 'Actualizando...' : 'Actualizar'}
+          </button>
+          <button onClick={() => toggleFavorito(selectedParada.id)} style={{
+            background: favoritos.includes(selectedParada.id) ? theme.danger : theme.bgCard, color: favoritos.includes(selectedParada.id) ? '#fff' : theme.text,
+            border: `1px solid ${theme.border}`, borderRadius: 12, padding: 12, cursor: 'pointer'
+          }}>
+            <Heart size={18} fill={favoritos.includes(selectedParada.id) ? '#fff' : 'transparent'} />
+          </button>
+          <a href={`https://www.google.com/maps/dir/?api=1&destination=${selectedParada.lat},${selectedParada.lng}&travelmode=walking`}
+            target="_blank" rel="noopener noreferrer" style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgCard,
+            border: `1px solid ${theme.border}`, borderRadius: 12, padding: 12
+          }}>
+            <Navigation size={18} color={theme.text} />
+          </a>
+        </div>
+
+        <div style={{ padding: '0 24px 24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+            <h3 style={{ color: theme.text, margin: 0, fontSize: 16, fontWeight: 600 }}>Próximos buses</h3>
+            {lastUpdate && <span style={{ color: theme.textMuted, fontSize: 12 }}>{lastUpdate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {lineasAMostrar
+              .filter(lineaId => !selectedLinea || lineaId === selectedLinea)
+              .map(lineaId => {
+              const linea = getLinea(lineaId);
+              const tiempo = tiempos[`${selectedParada.id}-${lineaId}`];
+              const fmt = formatTiempo(tiempo, theme);
+              return linea && (
+                <div key={lineaId} style={{ background: theme.bgCard, borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, border: `1px solid ${theme.border}` }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 11, background: linea.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <span style={{ color: '#fff', fontWeight: 800, fontSize: 14 }}>L{lineaId}</span>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: theme.text, fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{linea.nombre}</div>
+                    <div style={{ color: theme.textMuted, fontSize: 12, marginTop: 2 }}>{linea.descripcion}</div>
+                  </div>
+                  <div style={{ background: `${fmt.color}20`, borderRadius: 10, padding: '8px 14px', minWidth: 70, textAlign: 'center' }}>
+                    <span style={{ color: fmt.color, fontWeight: 700, fontSize: 14 }}>{fmt.text}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════
@@ -936,107 +1038,6 @@ export default function App() {
   //
   // Impacto actual: Rendimiento significativamente mejorado (3/8 componentes refactorizados)
   // ═══════════════════════════════════════════════════════════════════════════
-
-  const ParadaDetail = () => {
-    if (!selectedParada) return null;
-
-    // Cerrar modal y limpiar filtro
-    const handleClose = () => {
-      setSelectedParada(null);
-      setCommuteFilterLineas(null);
-    };
-
-    // Determinar qué líneas mostrar
-    const lineasAMostrar = commuteFilterLineas || selectedParada.lineas;
-
-    return (
-      <div onClick={handleClose} style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)',
-        zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
-      }}>
-        <div onClick={e => e.stopPropagation()} style={{
-          background: t.bg, borderRadius: '24px 24px 0 0', width: '100%', maxWidth: 500, maxHeight: '90vh', overflow: 'auto'
-        }}>
-          <div style={{ position: 'sticky', top: 0, background: t.bg, padding: '20px 24px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 16, zIndex: 10 }}>
-            <div style={{ width: 56, height: 56, borderRadius: 14, background: t.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ color: '#fff', fontWeight: 800, fontSize: 18 }}>{selectedParada.id}</span>
-            </div>
-            <div style={{ flex: 1 }}>
-              <h2 style={{ color: t.text, margin: 0, fontSize: 17, fontWeight: 700 }}>{selectedParada.nombre}</h2>
-              <p style={{ color: t.textMuted, margin: '4px 0 0', fontSize: 13 }}>
-                {commuteFilterLineas ? `${lineasAMostrar.length} ${lineasAMostrar.length === 1 ? 'línea útil' : 'líneas útiles'}` : `${selectedParada.lineas.length} líneas`}
-                {selectedParada.distancia !== undefined && ` • ${formatDistance(selectedParada.distancia)}`}
-              </p>
-            </div>
-            <button onClick={handleClose} style={{ background: t.bgCard, border: 'none', borderRadius: 12, padding: 10, cursor: 'pointer' }}>
-              <X size={20} color={t.text} />
-            </button>
-          </div>
-
-          {!isOnline && (
-            <div style={{ margin: '16px 24px 0', padding: '12px 16px', background: `${t.warning}20`, borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <CloudOff size={18} color={t.warning} />
-              <span style={{ color: t.text, fontSize: 13 }}>Sin conexión</span>
-            </div>
-          )}
-
-          <div style={{ padding: '16px 24px', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button onClick={() => loadTiempos(selectedParada)} disabled={loading || !isOnline} style={{
-              flex: '1 1 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              background: isOnline ? t.accent : t.textMuted, color: '#fff', border: 'none', borderRadius: 12,
-              padding: '12px 16px', fontWeight: 600, fontSize: 14, cursor: loading || !isOnline ? 'not-allowed' : 'pointer'
-            }}>
-              <RefreshCw size={18} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-              {loading ? 'Actualizando...' : 'Actualizar'}
-            </button>
-            <button onClick={() => toggleFavorito(selectedParada.id)} style={{
-              background: favoritos.includes(selectedParada.id) ? t.danger : t.bgCard, color: favoritos.includes(selectedParada.id) ? '#fff' : t.text,
-              border: `1px solid ${t.border}`, borderRadius: 12, padding: 12, cursor: 'pointer'
-            }}>
-              <Heart size={18} fill={favoritos.includes(selectedParada.id) ? '#fff' : 'transparent'} />
-            </button>
-            <a href={`https://www.google.com/maps/dir/?api=1&destination=${selectedParada.lat},${selectedParada.lng}&travelmode=walking`} 
-              target="_blank" rel="noopener noreferrer" style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.bgCard,
-              border: `1px solid ${t.border}`, borderRadius: 12, padding: 12
-            }}>
-              <Navigation size={18} color={t.text} />
-            </a>
-          </div>
-
-          <div style={{ padding: '0 24px 24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-              <h3 style={{ color: t.text, margin: 0, fontSize: 16, fontWeight: 600 }}>Próximos buses</h3>
-              {lastUpdate && <span style={{ color: t.textMuted, fontSize: 12 }}>{lastUpdate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {lineasAMostrar
-                .filter(lineaId => !selectedLinea || lineaId === selectedLinea)
-                .map(lineaId => {
-                const linea = getLinea(lineaId);
-                const tiempo = tiempos[`${selectedParada.id}-${lineaId}`];
-                const fmt = formatTiempo(tiempo, t);
-                return linea && (
-                  <div key={lineaId} style={{ background: t.bgCard, borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, border: `1px solid ${t.border}` }}>
-                    <div style={{ width: 44, height: 44, borderRadius: 11, background: linea.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <span style={{ color: '#fff', fontWeight: 800, fontSize: 14 }}>L{lineaId}</span>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: t.text, fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{linea.nombre}</div>
-                      <div style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>{linea.descripcion}</div>
-                    </div>
-                    <div style={{ background: `${fmt.color}20`, borderRadius: 10, padding: '8px 14px', minWidth: 70, textAlign: 'center' }}>
-                      <span style={{ color: fmt.color, fontWeight: 700, fontSize: 14 }}>{fmt.text}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   // Mapa genérico para Cercanas, Favoritos y Líneas
   const GeneralMapView = ({ paradas, lineaId = null }) => {
@@ -1801,7 +1802,7 @@ export default function App() {
         {activeTab === 'rutas' && <RoutePlannerView />}
       </main>
 
-      {selectedParada && <ParadaDetail />}
+      {selectedParada && <ParadaDetail selectedParada={selectedParada} setSelectedParada={setSelectedParada} commuteFilterLineas={commuteFilterLineas} setCommuteFilterLineas={setCommuteFilterLineas} theme={t} isOnline={isOnline} loading={loading} loadTiempos={loadTiempos} favoritos={favoritos} toggleFavorito={toggleFavorito} lastUpdate={lastUpdate} selectedLinea={selectedLinea} tiempos={tiempos} />}
 
       {/* Footer */}
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: `${t.bg}f0`, backdropFilter: 'blur(20px)', borderTop: `1px solid ${t.border}`, padding: '10px 20px', paddingBottom: 'max(10px, env(safe-area-inset-bottom))' }}>
