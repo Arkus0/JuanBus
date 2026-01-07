@@ -1365,164 +1365,115 @@ export default function App() {
   };
 
   // Vista del Planificador de Rutas
-  const RoutePlannerView = () => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Selectores de origen y destino */}
-      <div style={{ background: t.bgCard, borderRadius: 16, padding: 20, border: `1px solid ${t.border}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <MapIcon size={24} color={t.accent} />
-          <h2 style={{ margin: 0, color: t.text, fontSize: 18, fontWeight: 700 }}>Planificador de Rutas</h2>
+  const RoutePlannerView = () => {
+    const generateGoogleMapsUrl = () => {
+      if (!origenCoords || !destinoCoords) return null;
+
+      const origin = `${origenCoords.lat},${origenCoords.lng}`;
+      const destination = `${destinoCoords.lat},${destinoCoords.lng}`;
+
+      return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=transit`;
+    };
+
+    const openGoogleMaps = () => {
+      const url = generateGoogleMapsUrl();
+      if (url) {
+        window.open(url, '_blank');
+      }
+    };
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Selectores de origen y destino */}
+        <div style={{ background: t.bgCard, borderRadius: 16, padding: 20, border: `1px solid ${t.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <MapIcon size={24} color={t.accent} />
+            <h2 style={{ margin: 0, color: t.text, fontSize: 18, fontWeight: 700 }}>Planificador de Rutas</h2>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <LocationSelector
+              label="Origen"
+              value={origenCoords}
+              onChange={setOrigenCoords}
+              placeholder="Selecciona ubicación de origen"
+            />
+
+            <LocationSelector
+              label="Destino"
+              value={destinoCoords}
+              onChange={setDestinoCoords}
+              placeholder="Selecciona ubicación de destino"
+            />
+
+            {/* Botón intercambiar */}
+            {origenCoords && destinoCoords && (
+              <button
+                onClick={() => {
+                  const temp = origenCoords;
+                  setOrigenCoords(destinoCoords);
+                  setDestinoCoords(temp);
+                }}
+                style={{
+                  background: t.bgHover, color: t.text, border: `1px solid ${t.border}`, borderRadius: 10, padding: '10px 14px',
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center'
+                }}
+              >
+                <RefreshCw size={16} />
+                Intercambiar origen y destino
+              </button>
+            )}
+          </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <LocationSelector
-            label="Origen"
-            value={origenCoords}
-            onChange={setOrigenCoords}
-            placeholder="Selecciona ubicación de origen"
-          />
-
-          <LocationSelector
-            label="Destino"
-            value={destinoCoords}
-            onChange={setDestinoCoords}
-            placeholder="Selecciona ubicación de destino"
-          />
-
-          {/* Botón intercambiar */}
-          {origenCoords && destinoCoords && (
-            <button
-              onClick={() => {
-                const temp = origenCoords;
-                setOrigenCoords(destinoCoords);
-                setDestinoCoords(temp);
-              }}
-              style={{
-                background: t.bgHover, color: t.text, border: `1px solid ${t.border}`, borderRadius: 10, padding: '10px 14px',
-                fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center'
-              }}
-            >
-              <RefreshCw size={16} />
-              Intercambiar origen y destino
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Mapa */}
-      {(origenCoords || destinoCoords) && <MapView rutas={rutasCalculadas} />}
-
-      {/* Resultados de rutas */}
-      {rutasCalculadas.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <h3 style={{ margin: 0, color: t.text, fontSize: 16, fontWeight: 700 }}>
-            {rutasCalculadas.length} {rutasCalculadas.length === 1 ? 'ruta encontrada' : 'rutas encontradas'}
-          </h3>
-
-          {rutasCalculadas.map((ruta, idx) => (
-            <div
-              key={idx}
-              onClick={() => setRutaSeleccionada(idx)}
-              style={{
-                background: t.bgCard, borderRadius: 16, padding: 16, cursor: 'pointer',
-                border: `2px solid ${rutaSeleccionada === idx ? t.accent : t.border}` // Comparar por índice
-              }}
-            >
-              {/* Badge "Recomendada" para la primera ruta */}
-              {idx === 0 && (
-                <div style={{
-                  display: 'inline-block',
-                  background: t.accent,
-                  color: '#fff',
-                  padding: '4px 10px',
-                  borderRadius: 8,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  marginBottom: 10
-                }}>
-                  ⚡ Recomendada
-                </div>
-              )}
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {ruta.tipo === 'directa' ? (
-                    <Zap size={20} color={t.success} />
-                  ) : (
-                    <Navigation size={20} color={t.warning} />
-                  )}
-                  <span style={{ color: t.text, fontSize: 15, fontWeight: 600 }}>
-                    {ruta.detalles}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <MapPin size={16} color={t.textMuted} />
-                  <span style={{ color: t.text, fontWeight: 600, fontSize: 14 }}>
-                    {formatDistance(ruta.distanciaAndando)}
-                  </span>
-                </div>
-              </div>
-
-              {ruta.segmentos.map((seg, sidx) => (
-                <div key={sidx} style={{ marginBottom: sidx < ruta.segmentos.length - 1 ? 10 : 0 }}>
-                  {seg.tipo === 'caminar' ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
-                      <MapPin size={16} color={t.textMuted} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ color: t.textMuted, fontSize: 12 }}>
-                          Caminar {formatDistance(seg.distancia)} • {seg.desde} → {seg.hasta}
-                        </div>
-                      </div>
-                    </div>
-                  ) : seg.tipo === 'bus' ? (
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                        <div style={{
-                          width: 32, height: 32, borderRadius: 8, background: seg.color,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }}>
-                          <span style={{ color: '#fff', fontWeight: 800, fontSize: 12 }}>L{seg.linea}</span>
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ color: t.text, fontSize: 13, fontWeight: 600 }}>{seg.nombre}</div>
-                          <div style={{ color: t.textMuted, fontSize: 12 }}>{seg.desde} → {seg.hasta}</div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : seg.tipo === 'transbordo' ? (
-                    <div style={{ margin: '8px 0', padding: '8px 12px', background: `${t.warning}20`, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <RefreshCw size={14} color={t.warning} />
-                      <span style={{ color: t.warning, fontSize: 12, fontWeight: 600 }}>Transbordo en {seg.en}</span>
-                    </div>
-                  ) : null}
-                </div>
-              ))}
+        {/* Botón para abrir Google Maps */}
+        {origenCoords && destinoCoords ? (
+          <div style={{ background: t.bgCard, borderRadius: 16, padding: 24, border: `1px solid ${t.border}`, textAlign: 'center' }}>
+            <div style={{ marginBottom: 16 }}>
+              <MapIcon size={48} color={t.accent} style={{ opacity: 0.8 }} />
             </div>
-          ))}
-        </div>
-      )}
-
-      {origenCoords && destinoCoords && rutasCalculadas.length === 0 && (
-        <div style={{ background: t.bgCard, borderRadius: 16, padding: 40, textAlign: 'center', border: `1px solid ${t.border}` }}>
-          <AlertTriangle size={48} color={t.warning} style={{ opacity: 0.5 }} />
-          <p style={{ color: t.text, marginTop: 16, fontSize: 15 }}>No se encontraron rutas disponibles</p>
-          <p style={{ color: t.textMuted, fontSize: 13, marginTop: 8 }}>
-            No hay paradas cercanas a las ubicaciones seleccionadas o no existen líneas que las conecten.
-          </p>
-        </div>
-      )}
-
-      {!origenCoords && !destinoCoords && (
-        <div style={{ background: t.bgCard, borderRadius: 16, padding: 40, textAlign: 'center', border: `1px solid ${t.border}` }}>
-          <MapIcon size={48} color={t.accent} style={{ opacity: 0.5 }} />
-          <p style={{ color: t.text, marginTop: 16, fontSize: 15 }}>Selecciona origen y destino</p>
-          <p style={{ color: t.textMuted, fontSize: 13, marginTop: 8 }}>
-            Elige ubicaciones de origen y destino para calcular las mejores rutas disponibles. Puedes usar tu ubicación actual.
-          </p>
-        </div>
-      )}
-    </div>
-  );
+            <h3 style={{ margin: '0 0 8px', color: t.text, fontSize: 16, fontWeight: 700 }}>
+              Ruta lista para calcular
+            </h3>
+            <p style={{ color: t.textMuted, fontSize: 13, marginBottom: 20 }}>
+              De <span style={{ color: t.accent, fontWeight: 600 }}>{origenCoords.nombre}</span> a <span style={{ color: t.accent, fontWeight: 600 }}>{destinoCoords.nombre}</span>
+            </p>
+            <button
+              onClick={openGoogleMaps}
+              style={{
+                background: t.accent,
+                color: '#fff',
+                border: 'none',
+                borderRadius: 12,
+                padding: '14px 24px',
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 10,
+                boxShadow: `0 4px 12px ${t.accent}40`
+              }}
+            >
+              <ExternalLink size={20} />
+              Ver Ruta en Google Maps
+            </button>
+            <p style={{ color: t.textMuted, fontSize: 11, marginTop: 12 }}>
+              Se abrirá Google Maps con la ruta en transporte público
+            </p>
+          </div>
+        ) : (
+          <div style={{ background: t.bgCard, borderRadius: 16, padding: 40, textAlign: 'center', border: `1px solid ${t.border}` }}>
+            <MapIcon size={48} color={t.accent} style={{ opacity: 0.5 }} />
+            <p style={{ color: t.text, marginTop: 16, fontSize: 15 }}>Selecciona origen y destino</p>
+            <p style={{ color: t.textMuted, fontSize: 13, marginTop: 8 }}>
+              Elige ubicaciones de origen y destino para calcular la mejor ruta en transporte público con Google Maps.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
