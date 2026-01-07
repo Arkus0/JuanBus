@@ -1136,8 +1136,9 @@ export default function App() {
 
   // Componente Selector de Parada
   const LocationSelector = ({ label, value, onChange, placeholder }) => {
+    const [lugarTexto, setLugarTexto] = useState('');
     const [searchLocal, setSearchLocal] = useState('');
-    const [showDropdown, setShowDropdown] = useState(false);
+    const [showParadasDropdown, setShowParadasDropdown] = useState(false);
 
     const paradasFiltradas = useMemo(() => {
       if (!searchLocal) return PARADAS.slice(0, 50);
@@ -1148,51 +1149,127 @@ export default function App() {
       ).slice(0, 20);
     }, [searchLocal]);
 
+    // Actualizar el campo de texto cuando value cambie
+    useEffect(() => {
+      if (value && value.tipo === 'lugar') {
+        setLugarTexto(value.nombre);
+      } else if (value && value.tipo !== 'ubicacion' && value.tipo !== 'parada') {
+        setLugarTexto('');
+      }
+    }, [value]);
+
     return (
       <div style={{ position: 'relative' }}>
         <label style={{ display: 'block', color: t.text, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{label}</label>
-        <div onClick={() => setShowDropdown(!showDropdown)} style={{
-          background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: '12px 14px',
-          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-        }}>
-          <span style={{ color: value ? t.text : t.textMuted, fontSize: 14 }}>
-            {value ? value.nombre : placeholder}
-          </span>
-          <ChevronDown size={18} color={t.textMuted} style={{ transform: showDropdown ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
+
+        {/* Campo de texto para buscar lugar */}
+        <input
+          type="text"
+          placeholder={placeholder || "Escribe un lugar (ej: Universidad de Almería)"}
+          value={lugarTexto}
+          onChange={(e) => {
+            setLugarTexto(e.target.value);
+            if (e.target.value) {
+              onChange({ nombre: e.target.value, tipo: 'lugar' });
+            }
+          }}
+          style={{
+            width: '100%',
+            padding: '12px 14px',
+            borderRadius: 12,
+            border: `1px solid ${t.border}`,
+            background: t.bgCard,
+            color: t.text,
+            fontSize: 14,
+            outline: 'none',
+            marginBottom: 8
+          }}
+        />
+
+        {/* Botones de acceso rápido */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {/* Botón Mi ubicación */}
+          {userLocation && (
+            <button
+              onClick={() => {
+                onChange({ lat: userLocation.lat, lng: userLocation.lng, nombre: 'Mi ubicación', tipo: 'ubicacion' });
+                setLugarTexto('');
+              }}
+              style={{
+                flex: 1,
+                padding: '10px 12px',
+                borderRadius: 10,
+                border: `1px solid ${t.border}`,
+                background: value?.tipo === 'ubicacion' ? t.accent : t.bgCard,
+                color: value?.tipo === 'ubicacion' ? '#fff' : t.text,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6
+              }}
+            >
+              <Locate size={16} />
+              Mi ubicación
+            </button>
+          )}
+
+          {/* Botón Parada de autobús */}
+          <button
+            onClick={() => setShowParadasDropdown(!showParadasDropdown)}
+            style={{
+              flex: 1,
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: `1px solid ${t.border}`,
+              background: value?.tipo === 'parada' ? t.accent : t.bgCard,
+              color: value?.tipo === 'parada' ? '#fff' : t.text,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6
+            }}
+          >
+            <MapPin size={16} />
+            Parada de autobús
+          </button>
         </div>
 
-        {showDropdown && (
+        {/* Mostrar selección actual si es parada */}
+        {value && value.tipo === 'parada' && (
           <div style={{
-            position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: t.bgCard,
-            border: `1px solid ${t.border}`, borderRadius: 12, maxHeight: 300, overflowY: 'auto', zIndex: 100,
+            marginTop: 8,
+            padding: '8px 12px',
+            background: t.bgHover,
+            borderRadius: 8,
+            fontSize: 13,
+            color: t.text
+          }}>
+            <strong>Parada:</strong> {value.nombre}
+          </div>
+        )}
+
+        {/* Dropdown de paradas */}
+        {showParadasDropdown && (
+          <div style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            marginTop: 4,
+            background: t.bgCard,
+            border: `1px solid ${t.border}`,
+            borderRadius: 12,
+            maxHeight: 300,
+            overflowY: 'auto',
+            zIndex: 100,
             boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
           }}>
-            {/* Opción "Mi ubicación" */}
-            {userLocation && (
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChange({ lat: userLocation.lat, lng: userLocation.lng, nombre: 'Mi ubicación' });
-                  setShowDropdown(false);
-                }}
-                style={{
-                  padding: '12px 14px',
-                  cursor: 'pointer',
-                  background: value?.nombre === 'Mi ubicación' ? t.bgHover : 'transparent',
-                  borderBottom: `1px solid ${t.border}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10
-                }}
-              >
-                <Locate size={16} color={t.accent} />
-                <div>
-                  <div style={{ color: t.accent, fontSize: 13, fontWeight: 600 }}>Mi ubicación</div>
-                  <div style={{ color: t.textMuted, fontSize: 11, marginTop: 2 }}>Usar mi posición actual</div>
-                </div>
-              </div>
-            )}
-
             <div style={{ padding: 10, borderBottom: `1px solid ${t.border}`, position: 'sticky', top: 0, background: t.bgCard }}>
               <input
                 type="text"
@@ -1200,8 +1277,14 @@ export default function App() {
                 value={searchLocal}
                 onChange={(e) => setSearchLocal(e.target.value)}
                 style={{
-                  width: '100%', padding: '8px 12px', borderRadius: 8, border: `1px solid ${t.border}`,
-                  background: t.bg, color: t.text, fontSize: 13, outline: 'none'
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: `1px solid ${t.border}`,
+                  background: t.bg,
+                  color: t.text,
+                  fontSize: 13,
+                  outline: 'none'
                 }}
                 onClick={(e) => e.stopPropagation()}
               />
@@ -1212,12 +1295,15 @@ export default function App() {
                   key={p.id}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onChange({ lat: p.lat, lng: p.lng, nombre: p.nombre });
-                    setShowDropdown(false);
+                    onChange({ lat: p.lat, lng: p.lng, nombre: p.nombre, tipo: 'parada' });
+                    setShowParadasDropdown(false);
                     setSearchLocal('');
+                    setLugarTexto('');
                   }}
                   style={{
-                    padding: '10px 14px', cursor: 'pointer', background: value?.nombre === p.nombre ? t.bgHover : 'transparent',
+                    padding: '10px 14px',
+                    cursor: 'pointer',
+                    background: value?.nombre === p.nombre ? t.bgHover : 'transparent',
                     borderBottom: `1px solid ${t.border}`
                   }}
                 >
@@ -1369,15 +1455,31 @@ export default function App() {
     const generateGoogleMapsUrl = () => {
       if (!origenCoords || !destinoCoords) return null;
 
-      // Para origen: si es "Mi ubicación" usar coordenadas, si no usar nombre de parada
-      const origin = origenCoords.nombre === 'Mi ubicación'
-        ? `${origenCoords.lat},${origenCoords.lng}`
-        : encodeURIComponent(`${origenCoords.nombre}, Almería`);
+      // Para origen: determinar formato según tipo
+      let origin;
+      if (origenCoords.tipo === 'ubicacion') {
+        // Mi ubicación - usar coordenadas GPS
+        origin = `${origenCoords.lat},${origenCoords.lng}`;
+      } else if (origenCoords.tipo === 'parada') {
+        // Parada de autobús - usar nombre con ciudad
+        origin = encodeURIComponent(`${origenCoords.nombre}, Almería`);
+      } else {
+        // Lugar personalizado - usar el texto tal cual con ciudad
+        origin = encodeURIComponent(`${origenCoords.nombre}, Almería`);
+      }
 
-      // Para destino: si es "Mi ubicación" usar coordenadas, si no usar nombre de parada
-      const destination = destinoCoords.nombre === 'Mi ubicación'
-        ? `${destinoCoords.lat},${destinoCoords.lng}`
-        : encodeURIComponent(`${destinoCoords.nombre}, Almería`);
+      // Para destino: determinar formato según tipo
+      let destination;
+      if (destinoCoords.tipo === 'ubicacion') {
+        // Mi ubicación - usar coordenadas GPS
+        destination = `${destinoCoords.lat},${destinoCoords.lng}`;
+      } else if (destinoCoords.tipo === 'parada') {
+        // Parada de autobús - usar nombre con ciudad
+        destination = encodeURIComponent(`${destinoCoords.nombre}, Almería`);
+      } else {
+        // Lugar personalizado - usar el texto tal cual con ciudad
+        destination = encodeURIComponent(`${destinoCoords.nombre}, Almería`);
+      }
 
       return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=transit`;
     };
