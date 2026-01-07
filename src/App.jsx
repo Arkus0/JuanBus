@@ -1352,10 +1352,7 @@ export default function App() {
               {mostrarBotonMaps ? (
                 'Tap para ver ruta en Google Maps'
               ) : parada ? (
-                <>
-                  {parada.nombre.length > 30 ? parada.nombre.substring(0, 30) + '...' : parada.nombre}
-                  {esRutaDinamica && <span style={{ marginLeft: 6 }}>• Ruta calculada</span>}
-                </>
+                parada.nombre.length > 30 ? parada.nombre.substring(0, 30) + '...' : parada.nombre
               ) : (
                 'Configura tus paradas'
               )}
