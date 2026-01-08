@@ -192,6 +192,8 @@ const LocationSelector = ({ label, value, onChange, placeholder, theme, userLoca
           setLugarTexto(e.target.value);
           if (e.target.value) {
             onChange({ nombre: e.target.value, tipo: 'lugar' });
+          } else {
+            onChange(null); // Limpiar cuando el campo esté vacío
           }
         }}
         style={{
@@ -344,22 +346,18 @@ const RoutePlannerView = ({ theme, origenCoords, setOrigenCoords, destinoCoords,
   const generateGoogleMapsUrl = useCallback(() => {
     if (!origenCoords || !destinoCoords) return null;
 
-    // Para origen: determinar formato según tipo
+    // Para origen: usar coordenadas si están disponibles (ubicación o parada), sino usar nombre
     let origin;
-    if (origenCoords.tipo === 'ubicacion') {
+    if (origenCoords.lat && origenCoords.lng) {
       origin = `${origenCoords.lat},${origenCoords.lng}`;
-    } else if (origenCoords.tipo === 'parada') {
-      origin = encodeURIComponent(`${origenCoords.nombre}, Almería`);
     } else {
       origin = encodeURIComponent(`${origenCoords.nombre}, Almería`);
     }
 
-    // Para destino: determinar formato según tipo
+    // Para destino: usar coordenadas si están disponibles (ubicación o parada), sino usar nombre
     let destination;
-    if (destinoCoords.tipo === 'ubicacion') {
+    if (destinoCoords.lat && destinoCoords.lng) {
       destination = `${destinoCoords.lat},${destinoCoords.lng}`;
-    } else if (destinoCoords.tipo === 'parada') {
-      destination = encodeURIComponent(`${destinoCoords.nombre}, Almería`);
     } else {
       destination = encodeURIComponent(`${destinoCoords.nombre}, Almería`);
     }
