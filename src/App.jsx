@@ -478,86 +478,112 @@ const RoutePlannerView = ({ theme, origenCoords, setOrigenCoords, destinoCoords,
 // WIDGET CASA / TRABAJO (CommuteWidget)
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, trabajoDireccion, userLocation, setCommuteFilterLineas, setSelectedParada }) => {
+const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, trabajoDireccion, userLocation, getUserLocation, loadingLocation, setCommuteFilterLineas, setSelectedParada }) => {
   const getParada = (id) => PARADAS.find(p => p.id === id);
 
   // Maneja click en "Ir al Trabajo" - lógica inteligente
-  const handleIrAlTrabajo = () => {
+  const handleIrAlTrabajo = async () => {
     const paradaCasa = casaParadaId ? getParada(casaParadaId) : null;
 
-    // Si hay parada de casa y ubicación del usuario
-    if (paradaCasa && userLocation) {
-      // Calcular distancia a la parada de casa
-      const distancia = haversineDistance(
-        userLocation.lat,
-        userLocation.lng,
-        paradaCasa.lat,
-        paradaCasa.lng
-      );
+    try {
+      // Primero obtener la ubicación actual
+      const location = await getUserLocation();
 
-      // Si está cerca de casa (< 400m), mostrar parada de casa
-      if (distancia < 0.4) {
-        setSelectedParada(paradaCasa);
-        setCommuteFilterLineas(null);
+      // Si hay parada de casa y ubicación del usuario
+      if (paradaCasa && location) {
+        // Calcular distancia a la parada de casa
+        const distancia = haversineDistance(
+          location.lat,
+          location.lng,
+          paradaCasa.lat,
+          paradaCasa.lng
+        );
+
+        // Si está cerca de casa (< 400m), mostrar parada de casa y terminar
+        if (distancia < 0.4) {
+          setSelectedParada(paradaCasa);
+          setCommuteFilterLineas(null);
+          return;
+        }
+      }
+
+      // Si está lejos y hay dirección de trabajo, abrir Google Maps
+      if (trabajoDireccion) {
+        const origin = location
+          ? `${location.lat},${location.lng}`
+          : '';
+        const destination = encodeURIComponent(`${trabajoDireccion}, Almería`);
+        const url = `https://www.google.com/maps/dir/?api=1${origin ? `&origin=${origin}` : ''}&destination=${destination}&travelmode=transit`;
+        window.open(url, '_blank');
         return;
       }
-    }
 
-    // Si está lejos y hay dirección de trabajo, abrir Google Maps
-    if (trabajoDireccion) {
-      const origin = userLocation
-        ? `${userLocation.lat},${userLocation.lng}`
-        : '';
-      const destination = encodeURIComponent(`${trabajoDireccion}, Almería`);
-      const url = `https://www.google.com/maps/dir/?api=1${origin ? `&origin=${origin}` : ''}&destination=${destination}&travelmode=transit`;
-      window.open(url, '_blank');
-      return;
-    }
-
-    // Fallback: si no hay dirección pero sí parada, mostrar la parada de todos modos
-    if (paradaCasa) {
-      setSelectedParada(paradaCasa);
-      setCommuteFilterLineas(null);
+      // Fallback: si no hay dirección pero sí parada, mostrar la parada de todos modos
+      if (paradaCasa) {
+        setSelectedParada(paradaCasa);
+        setCommuteFilterLineas(null);
+      }
+    } catch (error) {
+      console.error('Error al obtener ubicación:', error);
+      // Si no se puede obtener ubicación y hay dirección, abrir Google Maps sin origen
+      if (trabajoDireccion) {
+        const destination = encodeURIComponent(`${trabajoDireccion}, Almería`);
+        const url = `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=transit`;
+        window.open(url, '_blank');
+      }
     }
   };
 
   // Maneja click en "Ir a Casa" - lógica inteligente
-  const handleIrACasa = () => {
+  const handleIrACasa = async () => {
     const paradaTrabajo = trabajoParadaId ? getParada(trabajoParadaId) : null;
 
-    // Si hay parada de trabajo y ubicación del usuario
-    if (paradaTrabajo && userLocation) {
-      // Calcular distancia a la parada de trabajo
-      const distancia = haversineDistance(
-        userLocation.lat,
-        userLocation.lng,
-        paradaTrabajo.lat,
-        paradaTrabajo.lng
-      );
+    try {
+      // Primero obtener la ubicación actual
+      const location = await getUserLocation();
 
-      // Si está cerca del trabajo (< 400m), mostrar parada de trabajo
-      if (distancia < 0.4) {
-        setSelectedParada(paradaTrabajo);
-        setCommuteFilterLineas(null);
+      // Si hay parada de trabajo y ubicación del usuario
+      if (paradaTrabajo && location) {
+        // Calcular distancia a la parada de trabajo
+        const distancia = haversineDistance(
+          location.lat,
+          location.lng,
+          paradaTrabajo.lat,
+          paradaTrabajo.lng
+        );
+
+        // Si está cerca del trabajo (< 400m), mostrar parada de trabajo y terminar
+        if (distancia < 0.4) {
+          setSelectedParada(paradaTrabajo);
+          setCommuteFilterLineas(null);
+          return;
+        }
+      }
+
+      // Si está lejos y hay dirección de casa, abrir Google Maps
+      if (casaDireccion) {
+        const origin = location
+          ? `${location.lat},${location.lng}`
+          : '';
+        const destination = encodeURIComponent(`${casaDireccion}, Almería`);
+        const url = `https://www.google.com/maps/dir/?api=1${origin ? `&origin=${origin}` : ''}&destination=${destination}&travelmode=transit`;
+        window.open(url, '_blank');
         return;
       }
-    }
 
-    // Si está lejos y hay dirección de casa, abrir Google Maps
-    if (casaDireccion) {
-      const origin = userLocation
-        ? `${userLocation.lat},${userLocation.lng}`
-        : '';
-      const destination = encodeURIComponent(`${casaDireccion}, Almería`);
-      const url = `https://www.google.com/maps/dir/?api=1${origin ? `&origin=${origin}` : ''}&destination=${destination}&travelmode=transit`;
-      window.open(url, '_blank');
-      return;
-    }
-
-    // Fallback: si no hay dirección pero sí parada, mostrar la parada de todos modos
-    if (paradaTrabajo) {
-      setSelectedParada(paradaTrabajo);
-      setCommuteFilterLineas(null);
+      // Fallback: si no hay dirección pero sí parada, mostrar la parada de todos modos
+      if (paradaTrabajo) {
+        setSelectedParada(paradaTrabajo);
+        setCommuteFilterLineas(null);
+      }
+    } catch (error) {
+      console.error('Error al obtener ubicación:', error);
+      // Si no se puede obtener ubicación y hay dirección, abrir Google Maps sin origen
+      if (casaDireccion) {
+        const destination = encodeURIComponent(`${casaDireccion}, Almería`);
+        const url = `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=transit`;
+        window.open(url, '_blank');
+      }
     }
   };
 
@@ -1204,6 +1230,8 @@ export default function App() {
           casaDireccion={casaDireccion}
           trabajoDireccion={trabajoDireccion}
           userLocation={userLocation}
+          getUserLocation={getUserLocation}
+          loadingLocation={loadingLocation}
           setCommuteFilterLineas={setCommuteFilterLineas}
           setSelectedParada={setSelectedParada}
         />
