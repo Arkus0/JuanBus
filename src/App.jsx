@@ -478,25 +478,95 @@ const RoutePlannerView = ({ theme, origenCoords, setOrigenCoords, destinoCoords,
 // WIDGET CASA / TRABAJO (CommuteWidget)
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, userLocation, setCommuteFilterLineas, setSelectedParada }) => {
+const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, trabajoDireccion, userLocation, setCommuteFilterLineas, setSelectedParada }) => {
   const getParada = (id) => PARADAS.find(p => p.id === id);
 
-  const handleClick = (id) => {
-    if (!id) return;
-    const parada = getParada(id);
-    if (parada) {
-      setSelectedParada(parada);
-      // Aquí podrías filtrar líneas específicas si tuvieras esa lógica guardada
+  // Maneja click en "Ir al Trabajo" - lógica inteligente
+  const handleIrAlTrabajo = () => {
+    const paradaCasa = casaParadaId ? getParada(casaParadaId) : null;
+
+    // Si hay parada de casa y ubicación del usuario
+    if (paradaCasa && userLocation) {
+      // Calcular distancia a la parada de casa
+      const distancia = haversineDistance(
+        userLocation.lat,
+        userLocation.lng,
+        paradaCasa.lat,
+        paradaCasa.lng
+      );
+
+      // Si está cerca de casa (< 400m), mostrar parada de casa
+      if (distancia < 0.4) {
+        setSelectedParada(paradaCasa);
+        setCommuteFilterLineas(null);
+        return;
+      }
+    }
+
+    // Si está lejos y hay dirección de trabajo, abrir Google Maps
+    if (trabajoDireccion) {
+      const origin = userLocation
+        ? `${userLocation.lat},${userLocation.lng}`
+        : '';
+      const destination = encodeURIComponent(`${trabajoDireccion}, Almería`);
+      const url = `https://www.google.com/maps/dir/?api=1${origin ? `&origin=${origin}` : ''}&destination=${destination}&travelmode=transit`;
+      window.open(url, '_blank');
+      return;
+    }
+
+    // Fallback: si no hay dirección pero sí parada, mostrar la parada de todos modos
+    if (paradaCasa) {
+      setSelectedParada(paradaCasa);
       setCommuteFilterLineas(null);
     }
   };
 
-  // Si no hay nada configurado, no mostramos nada para no ocupar espacio
-  if (!casaParadaId && !trabajoParadaId) return null;
+  // Maneja click en "Ir a Casa" - lógica inteligente
+  const handleIrACasa = () => {
+    const paradaTrabajo = trabajoParadaId ? getParada(trabajoParadaId) : null;
 
-  const ButtonCard = ({ icon: Icon, label, id, color }) => (
+    // Si hay parada de trabajo y ubicación del usuario
+    if (paradaTrabajo && userLocation) {
+      // Calcular distancia a la parada de trabajo
+      const distancia = haversineDistance(
+        userLocation.lat,
+        userLocation.lng,
+        paradaTrabajo.lat,
+        paradaTrabajo.lng
+      );
+
+      // Si está cerca del trabajo (< 400m), mostrar parada de trabajo
+      if (distancia < 0.4) {
+        setSelectedParada(paradaTrabajo);
+        setCommuteFilterLineas(null);
+        return;
+      }
+    }
+
+    // Si está lejos y hay dirección de casa, abrir Google Maps
+    if (casaDireccion) {
+      const origin = userLocation
+        ? `${userLocation.lat},${userLocation.lng}`
+        : '';
+      const destination = encodeURIComponent(`${casaDireccion}, Almería`);
+      const url = `https://www.google.com/maps/dir/?api=1${origin ? `&origin=${origin}` : ''}&destination=${destination}&travelmode=transit`;
+      window.open(url, '_blank');
+      return;
+    }
+
+    // Fallback: si no hay dirección pero sí parada, mostrar la parada de todos modos
+    if (paradaTrabajo) {
+      setSelectedParada(paradaTrabajo);
+      setCommuteFilterLineas(null);
+    }
+  };
+
+  // Si no hay nada configurado, no mostramos nada
+  if (!casaParadaId && !trabajoParadaId && !casaDireccion && !trabajoDireccion) return null;
+
+  const ButtonCard = ({ icon: Icon, label, subtitle, onClick, isConfigured, color }) => (
     <div
-      onClick={() => handleClick(id)}
+      onClick={onClick}
       style={{
         flex: 1,
         background: theme.bgCard,
@@ -508,8 +578,8 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, userLocation, set
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
-        cursor: id ? 'pointer' : 'default',
-        opacity: id ? 1 : 0.6,
+        cursor: isConfigured ? 'pointer' : 'default',
+        opacity: isConfigured ? 1 : 0.6,
         boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
       }}
     >
@@ -519,25 +589,109 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, userLocation, set
       <div style={{ textAlign: 'center' }}>
         <div style={{ color: theme.text, fontWeight: 700, fontSize: 14 }}>{label}</div>
         <div style={{ color: theme.textMuted, fontSize: 11, marginTop: 2 }}>
-          {id ? `Parada ${id}` : 'No configurado'}
+          {subtitle}
         </div>
       </div>
     </div>
   );
+
+  // Determinar subtítulo para "Ir a Casa"
+  const getSubtituloIrACasa = () => {
+    if (!trabajoParadaId && !casaDireccion) return 'No configurado';
+
+    const paradaTrabajo = trabajoParadaId ? getParada(trabajoParadaId) : null;
+
+    // Mostrar info de ubicación si no está disponible
+    if (!userLocation) {
+      if (casaDireccion) return 'Ruta a casa (GPS desactivado)';
+      if (trabajoParadaId) return `Parada ${trabajoParadaId} (GPS desactivado)`;
+      return 'No configurado';
+    }
+
+    if (paradaTrabajo && userLocation) {
+      const distancia = haversineDistance(
+        userLocation.lat,
+        userLocation.lng,
+        paradaTrabajo.lat,
+        paradaTrabajo.lng
+      );
+
+      if (distancia < 0.4) {
+        return `Parada ${trabajoParadaId}`;
+      }
+      // Mostrar si está lejos
+      if (casaDireccion) {
+        return `Ruta a casa`;
+      }
+      return `Parada ${trabajoParadaId}`;
+    }
+
+    // Si hay dirección, mostrar "Ruta a casa", sino mostrar la parada como fallback
+    if (casaDireccion) {
+      return 'Ruta a casa';
+    } else if (trabajoParadaId) {
+      return `Parada ${trabajoParadaId}`;
+    }
+    return 'No configurado';
+  };
+
+  // Determinar subtítulo para "Ir al Trabajo"
+  const getSubtituloIrAlTrabajo = () => {
+    if (!casaParadaId && !trabajoDireccion) return 'No configurado';
+
+    const paradaCasa = casaParadaId ? getParada(casaParadaId) : null;
+
+    // Mostrar info de ubicación si no está disponible
+    if (!userLocation) {
+      if (trabajoDireccion) return 'Ruta al trabajo (GPS desactivado)';
+      if (casaParadaId) return `Parada ${casaParadaId} (GPS desactivado)`;
+      return 'No configurado';
+    }
+
+    if (paradaCasa && userLocation) {
+      const distancia = haversineDistance(
+        userLocation.lat,
+        userLocation.lng,
+        paradaCasa.lat,
+        paradaCasa.lng
+      );
+
+      if (distancia < 0.4) {
+        return `Parada ${casaParadaId}`;
+      }
+      // Mostrar si está lejos
+      if (trabajoDireccion) {
+        return `Ruta al trabajo`;
+      }
+      return `Parada ${casaParadaId}`;
+    }
+
+    // Si hay dirección, mostrar "Ruta al trabajo", sino mostrar la parada como fallback
+    if (trabajoDireccion) {
+      return 'Ruta al trabajo';
+    } else if (casaParadaId) {
+      return `Parada ${casaParadaId}`;
+    }
+    return 'No configurado';
+  };
 
   return (
     <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
       <ButtonCard
         icon={Home}
         label="Ir a Casa"
-        id={casaParadaId}
+        subtitle={getSubtituloIrACasa()}
+        onClick={handleIrACasa}
+        isConfigured={!!(trabajoParadaId || casaDireccion)}
         color={theme.accent}
       />
       <ButtonCard
         icon={Briefcase}
         label="Ir al Trabajo"
-        id={trabajoParadaId}
-        color={theme.accent} // O usa otro color si prefieres distinguir
+        subtitle={getSubtituloIrAlTrabajo()}
+        onClick={handleIrAlTrabajo}
+        isConfigured={!!(casaParadaId || trabajoDireccion)}
+        color="#10b981"
       />
     </div>
   );
@@ -552,17 +706,23 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, userLocation, set
 
 export default function App() {
   const { isOnline, isInstalled, canInstall, install } = usePWA();
-  
-  
+
   const [activeTab, setActiveTab] = useState('cercanas');
   const [searchTerm, setSearchTerm] = useState('');
   const deferredSearchTerm = useDeferredValue(searchTerm); // Debouncing de búsqueda
   const [selectedParada, setSelectedParada] = useState(null);
   const [selectedLinea, setSelectedLinea] = useState(null);
   const [commuteFilterLineas, setCommuteFilterLineas] = useState(null); // Filtro de líneas desde widget casa/curro
-  const [favoritos, setFavoritos] = useState(() =>
-    safeJsonParse(localStorage.getItem('surbus_fav'), [])
-  );
+
+  // Favoritos con estructura: [{ id: 123, casa: true }, { id: 456, trabajo: true }, { id: 789 }]
+  const [favoritos, setFavoritos] = useState(() => {
+    const stored = safeJsonParse(localStorage.getItem('surbus_fav'), []);
+    // Migrar formato viejo [123, 456] a nuevo [{ id: 123 }, { id: 456 }]
+    if (stored.length > 0 && typeof stored[0] === 'number') {
+      return stored.map(id => ({ id }));
+    }
+    return stored;
+  });
   const [tiempos, setTiempos] = useState({});
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -581,13 +741,31 @@ export default function App() {
   // Estado de vista (lista o mapa)
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
 
-  // Paradas especiales: Casa y Trabajo
-  const [casaParadaId, setCasaParadaId] = useState(() =>
-    safeJsonParse(localStorage.getItem('surbus_casa'), null)
+  // Paradas especiales: Casa y Trabajo (derivadas de favoritos)
+  const casaParadaId = useMemo(() => {
+    const parada = favoritos.find(f => f.casa);
+    return parada ? parada.id : null;
+  }, [favoritos]);
+
+  const trabajoParadaId = useMemo(() => {
+    const parada = favoritos.find(f => f.trabajo);
+    return parada ? parada.id : null;
+  }, [favoritos]);
+
+  const [casaDireccion, setCasaDireccion] = useState(() =>
+    localStorage.getItem('surbus_casa_direccion') || ''
   );
-  const [trabajoParadaId, setTrabajoParadaId] = useState(() =>
-    safeJsonParse(localStorage.getItem('surbus_trabajo'), null)
+  const [trabajoDireccion, setTrabajoDireccion] = useState(() =>
+    localStorage.getItem('surbus_trabajo_direccion') || ''
   );
+
+  // Estado de expansión del panel de configuración Casa/Trabajo
+  // Expandido por defecto si los campos están vacíos
+  const [isConfigExpanded, setIsConfigExpanded] = useState(() => {
+    const casaDir = localStorage.getItem('surbus_casa_direccion') || '';
+    const trabajoDir = localStorage.getItem('surbus_trabajo_direccion') || '';
+    return !casaDir && !trabajoDir; // Expandido si ambos están vacíos
+  });
 
   // Tema
     const { theme: t, darkMode, toggleTheme } = useTheme();
@@ -657,17 +835,70 @@ export default function App() {
     };
   }, [selectedParada, autoRefresh, isOnline, loadTiempos]);
 
-  
+  // Guardar dirección de casa en localStorage
+  useEffect(() => {
+    if (casaDireccion) {
+      localStorage.setItem('surbus_casa_direccion', casaDireccion);
+    } else {
+      localStorage.removeItem('surbus_casa_direccion');
+    }
+  }, [casaDireccion]);
 
+  // Guardar dirección de trabajo en localStorage
+  useEffect(() => {
+    if (trabajoDireccion) {
+      localStorage.setItem('surbus_trabajo_direccion', trabajoDireccion);
+    } else {
+      localStorage.removeItem('surbus_trabajo_direccion');
+    }
+  }, [trabajoDireccion]);
+
+  // Guardar favoritos en localStorage
+  useEffect(() => {
+    localStorage.setItem('surbus_fav', JSON.stringify(favoritos));
+  }, [favoritos]);
+
+  // Funciones para manejar favoritos, casa y trabajo
   const toggleFavorito = (id) => {
     setFavoritos(prev => {
-      const isRemoving = prev.includes(id);
-      // Si se está quitando de favoritos, también limpiar casa/trabajo
-      if (isRemoving) {
-        if (casaParadaId === id) setCasaParadaId(null);
-        if (trabajoParadaId === id) setTrabajoParadaId(null);
+      const exists = prev.find(f => f.id === id);
+      if (exists) {
+        // Quitar de favoritos
+        return prev.filter(f => f.id !== id);
+      } else {
+        // Agregar a favoritos
+        return [...prev, { id }];
       }
-      return isRemoving ? prev.filter(x => x !== id) : [...prev, id];
+    });
+  };
+
+  const toggleCasa = (id) => {
+    setFavoritos(prev => {
+      const exists = prev.find(f => f.id === id);
+      if (exists) {
+        // Si ya está en favoritos, toggle la marca casa
+        return prev.map(f =>
+          f.id === id ? { ...f, casa: !f.casa } : { ...f, casa: false } // Solo una casa a la vez
+        );
+      } else {
+        // Si no está en favoritos, agregar con marca casa
+        return [...prev.map(f => ({ ...f, casa: false })), { id, casa: true }];
+      }
+    });
+  };
+
+  const toggleTrabajo = (id) => {
+    setFavoritos(prev => {
+      const exists = prev.find(f => f.id === id);
+      if (exists) {
+        // Si ya está en favoritos, toggle la marca trabajo
+        return prev.map(f =>
+          f.id === id ? { ...f, trabajo: !f.trabajo } : { ...f, trabajo: false } // Solo un trabajo a la vez
+        );
+      } else {
+        // Si no está en favoritos, agregar con marca trabajo
+        return [...prev.map(f => ({ ...f, trabajo: false })), { id, trabajo: true }];
+      }
     });
   };
 
@@ -717,7 +948,7 @@ export default function App() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setCasaParadaId(casaParadaId === parada.id ? null : parada.id);
+                toggleCasa(parada.id);
               }}
               style={{
                 background: casaParadaId === parada.id ? t.accent : 'transparent',
@@ -729,14 +960,14 @@ export default function App() {
                 alignItems: 'center',
                 justifyContent: 'center'
               }}
-              title="Marcar como Casa"
+              title="Parada cerca de casa (para ir al trabajo)"
             >
               <Home size={18} color={casaParadaId === parada.id ? '#fff' : t.textMuted} />
             </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setTrabajoParadaId(trabajoParadaId === parada.id ? null : parada.id);
+                toggleTrabajo(parada.id);
               }}
               style={{
                 background: trabajoParadaId === parada.id ? t.accent : 'transparent',
@@ -748,7 +979,7 @@ export default function App() {
                 alignItems: 'center',
                 justifyContent: 'center'
               }}
-              title="Marcar como Trabajo"
+              title="Parada cerca del trabajo (para volver a casa)"
             >
               <Briefcase size={18} color={trabajoParadaId === parada.id ? '#fff' : t.textMuted} />
             </button>
@@ -756,8 +987,8 @@ export default function App() {
         )}
         <button onClick={(e) => { e.stopPropagation(); toggleFavorito(parada.id); }}
           style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8 }}>
-          <Heart size={22} fill={favoritos.includes(parada.id) ? '#ef4444' : 'transparent'}
-            color={favoritos.includes(parada.id) ? '#ef4444' : t.textMuted} />
+          <Heart size={22} fill={favoritos.some(f => f.id === parada.id) ? '#ef4444' : 'transparent'}
+            color={favoritos.some(f => f.id === parada.id) ? '#ef4444' : t.textMuted} />
         </button>
       </div>
     </div>
@@ -816,10 +1047,10 @@ export default function App() {
               {loading ? 'Actualizando...' : 'Actualizar'}
             </button>
             <button onClick={() => toggleFavorito(selectedParada.id)} style={{
-              background: favoritos.includes(selectedParada.id) ? t.danger : t.bgCard, color: favoritos.includes(selectedParada.id) ? '#fff' : t.text,
+              background: favoritos.some(f => f.id === selectedParada.id) ? t.danger : t.bgCard, color: favoritos.some(f => f.id === selectedParada.id) ? '#fff' : t.text,
               border: `1px solid ${t.border}`, borderRadius: 12, padding: 12, cursor: 'pointer'
             }}>
-              <Heart size={18} fill={favoritos.includes(selectedParada.id) ? '#fff' : 'transparent'} />
+              <Heart size={18} fill={favoritos.some(f => f.id === selectedParada.id) ? '#fff' : 'transparent'} />
             </button>
             <a href={`https://www.google.com/maps/dir/?api=1&destination=${selectedParada.lat},${selectedParada.lng}&travelmode=walking`} 
               target="_blank" rel="noopener noreferrer" style={{
@@ -970,6 +1201,8 @@ export default function App() {
           theme={t}
           casaParadaId={casaParadaId}
           trabajoParadaId={trabajoParadaId}
+          casaDireccion={casaDireccion}
+          trabajoDireccion={trabajoDireccion}
           userLocation={userLocation}
           setCommuteFilterLineas={setCommuteFilterLineas}
           setSelectedParada={setSelectedParada}
@@ -1063,16 +1296,106 @@ export default function App() {
 
         {activeTab === 'favoritos' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* Configuración de dirección de casa */}
+            <div style={{ background: t.bgCard, borderRadius: 16, padding: 20, border: `1px solid ${t.border}` }}>
+              <div
+                onClick={() => setIsConfigExpanded(!isConfigExpanded)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: isConfigExpanded ? 12 : 0,
+                  cursor: 'pointer'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Settings size={20} color={t.accent} />
+                  <h3 style={{ margin: 0, color: t.text, fontSize: 16, fontWeight: 700 }}>Configuración Casa/Trabajo</h3>
+                </div>
+                <ChevronDown
+                  size={20}
+                  color={t.text}
+                  style={{
+                    transform: isConfigExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.3s ease'
+                  }}
+                />
+              </div>
+
+              {isConfigExpanded && (
+                <>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'block', color: t.text, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                      Dirección de tu casa
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Calle Mayor 10, Almería"
+                      value={casaDireccion}
+                      onChange={(e) => setCasaDireccion(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                        border: `1px solid ${t.border}`,
+                        background: t.bg,
+                        color: t.text,
+                        fontSize: 14,
+                        outline: 'none'
+                      }}
+                    />
+                    <p style={{ color: t.textMuted, fontSize: 11, marginTop: 6, marginBottom: 0 }}>
+                      Se usará cuando estés lejos del trabajo (más de 400m) y quieras volver a casa
+                    </p>
+                  </div>
+
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'block', color: t.text, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                      Dirección de tu trabajo
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Universidad de Almería"
+                      value={trabajoDireccion}
+                      onChange={(e) => setTrabajoDireccion(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                        border: `1px solid ${t.border}`,
+                        background: t.bg,
+                        color: t.text,
+                        fontSize: 14,
+                        outline: 'none'
+                      }}
+                    />
+                    <p style={{ color: t.textMuted, fontSize: 11, marginTop: 6, marginBottom: 0 }}>
+                      Se usará cuando estés lejos de casa (más de 400m) y quieras ir al trabajo
+                    </p>
+                  </div>
+
+                  <div style={{ background: `${t.accent}10`, borderRadius: 12, padding: 12 }}>
+                    <p style={{ color: t.text, fontSize: 12, margin: 0, lineHeight: 1.5 }}>
+                      <strong>💡 Cómo funciona:</strong><br/>
+                      • <strong>Parada Casa</strong> ({casaParadaId || 'no configurada'}): Se muestra si estás a menos de 400m de casa<br/>
+                      • <strong>Parada Trabajo</strong> ({trabajoParadaId || 'no configurada'}): Se muestra si estás a menos de 400m del trabajo<br/>
+                      • <strong>Direcciones</strong>: Si estás lejos (más de 400m), se abre Google Maps con la ruta. Si no hay dirección, se muestra la parada igualmente
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
             {favoritos.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px 20px', color: t.textMuted }}>
                 <Heart size={48} strokeWidth={1} style={{ opacity: 0.5 }} />
                 <p style={{ marginTop: 16 }}>No tienes favoritos</p>
               </div>
             ) : viewMode === 'list' ? (
-              PARADAS.filter(p => favoritos.includes(p.id)).map(p => <ParadaCard key={p.id} parada={p} showHomeWorkButtons={true} />)
+              PARADAS.filter(p => favoritos.some(f => f.id === p.id)).map(p => <ParadaCard key={p.id} parada={p} showHomeWorkButtons={true} />)
             ) : (
               <GeneralMapView
-                paradas={PARADAS.filter(p => favoritos.includes(p.id))}
+                paradas={PARADAS.filter(p => favoritos.some(f => f.id === p.id))}
                 theme={t}
                 activeTab={activeTab}
                 userLocation={userLocation}
