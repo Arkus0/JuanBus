@@ -96,8 +96,8 @@ export default function App() {
     })).sort((a, b) => (a.distancia || 0) - (b.distancia || 0));
   }, [userLocation]);
 
-  // Búsqueda con hook personalizado
-  const { paradasFiltradas } = useBusSearch(
+  // Búsqueda con hook personalizado (ahora con fuzzy search y sugerencias)
+  const { paradasFiltradas, suggestions } = useBusSearch(
     deferredSearchTerm,
     activeTab === 'cercanas' ? paradasCercanas : PARADAS,
     userLocation,
@@ -143,6 +143,7 @@ export default function App() {
         isOnline={isOnline}
         canInstall={canInstall}
         searchTerm={searchTerm}
+        suggestions={suggestions}
         onToggleTheme={toggleTheme}
         onInstall={install}
         onSearchChange={setSearchTerm}
