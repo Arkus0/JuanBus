@@ -485,6 +485,13 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
   const handleIrAlTrabajo = () => {
     const paradaCasa = casaParadaId ? getParada(casaParadaId) : null;
 
+    console.log('🏢 Ir al Trabajo:', {
+      casaParadaId,
+      paradaCasa: paradaCasa?.nombre,
+      userLocation,
+      trabajoDireccion
+    });
+
     // Si hay parada de casa y ubicación del usuario
     if (paradaCasa && userLocation) {
       // Calcular distancia a la parada de casa
@@ -495,8 +502,11 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
         paradaCasa.lng
       );
 
+      console.log('📏 Distancia a casa:', distancia.toFixed(2), 'km');
+
       // Si está cerca de casa (< 500m), mostrar parada de casa
       if (distancia < 0.5) {
+        console.log('✅ Cerca de casa, mostrando parada');
         setSelectedParada(paradaCasa);
         setCommuteFilterLineas(null);
         return;
@@ -505,6 +515,7 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
 
     // Si está lejos y hay dirección de trabajo, abrir Google Maps
     if (trabajoDireccion) {
+      console.log('🗺️ Lejos de casa, abriendo Google Maps');
       const origin = userLocation
         ? `${userLocation.lat},${userLocation.lng}`
         : '';
@@ -516,6 +527,7 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
 
     // Fallback: si no hay dirección pero sí parada, mostrar la parada de todos modos
     if (paradaCasa) {
+      console.log('🔄 Fallback, mostrando parada');
       setSelectedParada(paradaCasa);
       setCommuteFilterLineas(null);
     }
@@ -524,6 +536,13 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
   // Maneja click en "Ir a Casa" - lógica inteligente
   const handleIrACasa = () => {
     const paradaTrabajo = trabajoParadaId ? getParada(trabajoParadaId) : null;
+
+    console.log('🏠 Ir a Casa:', {
+      trabajoParadaId,
+      paradaTrabajo: paradaTrabajo?.nombre,
+      userLocation,
+      casaDireccion
+    });
 
     // Si hay parada de trabajo y ubicación del usuario
     if (paradaTrabajo && userLocation) {
@@ -535,8 +554,11 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
         paradaTrabajo.lng
       );
 
+      console.log('📏 Distancia al trabajo:', distancia.toFixed(2), 'km');
+
       // Si está cerca del trabajo (< 500m), mostrar parada de trabajo
       if (distancia < 0.5) {
+        console.log('✅ Cerca del trabajo, mostrando parada');
         setSelectedParada(paradaTrabajo);
         setCommuteFilterLineas(null);
         return;
@@ -545,6 +567,7 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
 
     // Si está lejos y hay dirección de casa, abrir Google Maps
     if (casaDireccion) {
+      console.log('🗺️ Lejos del trabajo, abriendo Google Maps');
       const origin = userLocation
         ? `${userLocation.lat},${userLocation.lng}`
         : '';
@@ -556,6 +579,7 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
 
     // Fallback: si no hay dirección pero sí parada, mostrar la parada de todos modos
     if (paradaTrabajo) {
+      console.log('🔄 Fallback, mostrando parada');
       setSelectedParada(paradaTrabajo);
       setCommuteFilterLineas(null);
     }
@@ -600,6 +624,14 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
     if (!trabajoParadaId && !casaDireccion) return 'No configurado';
 
     const paradaTrabajo = trabajoParadaId ? getParada(trabajoParadaId) : null;
+
+    // Mostrar info de ubicación si no está disponible
+    if (!userLocation) {
+      if (casaDireccion) return 'Ruta a casa (GPS desactivado)';
+      if (trabajoParadaId) return `Parada ${trabajoParadaId} (GPS desactivado)`;
+      return 'No configurado';
+    }
+
     if (paradaTrabajo && userLocation) {
       const distancia = haversineDistance(
         userLocation.lat,
@@ -607,9 +639,16 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
         paradaTrabajo.lat,
         paradaTrabajo.lng
       );
+      const distanciaMetros = Math.round(distancia * 1000);
+
       if (distancia < 0.5) {
-        return `Parada ${trabajoParadaId}`;
+        return `Parada ${trabajoParadaId} (${distanciaMetros}m)`;
       }
+      // Mostrar distancia si está lejos
+      if (casaDireccion) {
+        return `Ruta a casa (${distanciaMetros}m del trabajo)`;
+      }
+      return `Parada ${trabajoParadaId} (${distanciaMetros}m)`;
     }
 
     // Si hay dirección, mostrar "Ruta a casa", sino mostrar la parada como fallback
@@ -626,6 +665,14 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
     if (!casaParadaId && !trabajoDireccion) return 'No configurado';
 
     const paradaCasa = casaParadaId ? getParada(casaParadaId) : null;
+
+    // Mostrar info de ubicación si no está disponible
+    if (!userLocation) {
+      if (trabajoDireccion) return 'Ruta al trabajo (GPS desactivado)';
+      if (casaParadaId) return `Parada ${casaParadaId} (GPS desactivado)`;
+      return 'No configurado';
+    }
+
     if (paradaCasa && userLocation) {
       const distancia = haversineDistance(
         userLocation.lat,
@@ -633,9 +680,16 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
         paradaCasa.lat,
         paradaCasa.lng
       );
+      const distanciaMetros = Math.round(distancia * 1000);
+
       if (distancia < 0.5) {
-        return `Parada ${casaParadaId}`;
+        return `Parada ${casaParadaId} (${distanciaMetros}m)`;
       }
+      // Mostrar distancia si está lejos
+      if (trabajoDireccion) {
+        return `Ruta al trabajo (${distanciaMetros}m de casa)`;
+      }
+      return `Parada ${casaParadaId} (${distanciaMetros}m)`;
     }
 
     // Si hay dirección, mostrar "Ruta al trabajo", sino mostrar la parada como fallback
@@ -800,8 +854,10 @@ export default function App() {
   // Guardar parada de casa en localStorage
   useEffect(() => {
     if (casaParadaId) {
+      console.log('💾 Guardando parada de casa:', casaParadaId);
       localStorage.setItem('surbus_casa', JSON.stringify(casaParadaId));
     } else {
+      console.log('🗑️ Eliminando parada de casa');
       localStorage.removeItem('surbus_casa');
     }
   }, [casaParadaId]);
@@ -809,8 +865,10 @@ export default function App() {
   // Guardar parada de trabajo en localStorage
   useEffect(() => {
     if (trabajoParadaId) {
+      console.log('💾 Guardando parada de trabajo:', trabajoParadaId);
       localStorage.setItem('surbus_trabajo', JSON.stringify(trabajoParadaId));
     } else {
+      console.log('🗑️ Eliminando parada de trabajo');
       localStorage.removeItem('surbus_trabajo');
     }
   }, [trabajoParadaId]);
@@ -893,7 +951,9 @@ export default function App() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setCasaParadaId(casaParadaId === parada.id ? null : parada.id);
+                const newValue = casaParadaId === parada.id ? null : parada.id;
+                console.log('🏠 Marcando parada casa:', { parada: parada.id, nombre: parada.nombre, newValue });
+                setCasaParadaId(newValue);
               }}
               style={{
                 background: casaParadaId === parada.id ? t.accent : 'transparent',
@@ -912,7 +972,9 @@ export default function App() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setTrabajoParadaId(trabajoParadaId === parada.id ? null : parada.id);
+                const newValue = trabajoParadaId === parada.id ? null : parada.id;
+                console.log('🏢 Marcando parada trabajo:', { parada: parada.id, nombre: parada.nombre, newValue });
+                setTrabajoParadaId(newValue);
               }}
               style={{
                 background: trabajoParadaId === parada.id ? t.accent : 'transparent',
