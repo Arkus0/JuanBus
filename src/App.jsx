@@ -751,6 +751,7 @@ export default function App() {
   const [selectedParada, setSelectedParada] = useState(null);
   const [selectedLinea, setSelectedLinea] = useState(null);
   const [commuteFilterLineas, setCommuteFilterLineas] = useState(null); // Filtro de líneas desde widget casa/curro
+  const [showShareModal, setShowShareModal] = useState(false); // Modal para compartir tiempos de espera
 
   // Favoritos con estructura: [{ id: 123, casa: true }, { id: 456, trabajo: true }, { id: 789 }]
   const [favoritos, setFavoritos] = useState(() => {
@@ -950,6 +951,40 @@ export default function App() {
     return { text: `${mins} min`, color: t.danger };
   };
 
+  // Función para compartir tiempo de espera por WhatsApp
+  const shareWaitTime = (lineaId) => {
+    if (!selectedParada) return;
+
+    const linea = getLinea(lineaId);
+    const tiempo = tiempos[`${selectedParada.id}-${lineaId}`];
+    const fmt = formatTiempo(tiempo);
+
+    // Generar mensaje
+    let mensaje = `Línea ${lineaId}`;
+    if (linea) {
+      mensaje += ` (${linea.nombre})`;
+    }
+    mensaje += ` en ${selectedParada.nombre}: `;
+
+    if (tiempo?.success && tiempo.waitTimeString) {
+      const mins = parseInt(tiempo.waitTimeString);
+      if (!isNaN(mins)) {
+        mensaje += `llega en ${mins} ${mins === 1 ? 'minuto' : 'minutos'}`;
+      } else {
+        mensaje += fmt.text;
+      }
+    } else {
+      mensaje += fmt.text;
+    }
+
+    // Abrir WhatsApp
+    const urlMensaje = encodeURIComponent(mensaje);
+    window.open(`https://wa.me/?text=${urlMensaje}`, '_blank');
+
+    // Cerrar modal de compartir
+    setShowShareModal(false);
+  };
+
   // ═══════════════════════════════════════════════════════════════════════════
   // COMPONENTES
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1090,7 +1125,13 @@ export default function App() {
             }}>
               <Heart size={18} fill={favoritos.some(f => f.id === selectedParada.id) ? '#fff' : 'transparent'} />
             </button>
-            <a href={`https://www.google.com/maps/dir/?api=1&destination=${selectedParada.lat},${selectedParada.lng}&travelmode=walking`} 
+            <button onClick={() => setShowShareModal(true)} style={{
+              background: t.bgCard, color: t.text,
+              border: `1px solid ${t.border}`, borderRadius: 12, padding: 12, cursor: 'pointer'
+            }}>
+              <Share2 size={18} />
+            </button>
+            <a href={`https://www.google.com/maps/dir/?api=1&destination=${selectedParada.lat},${selectedParada.lng}&travelmode=walking`}
               target="_blank" rel="noopener noreferrer" style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.bgCard,
               border: `1px solid ${t.border}`, borderRadius: 12, padding: 12
@@ -1128,6 +1169,56 @@ export default function App() {
               })}
             </div>
           </div>
+
+          {/* Modal de selección de línea para compartir */}
+          {showShareModal && (
+            <div onClick={() => setShowShareModal(false)} style={{
+              position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+              zIndex: 1002, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24
+            }}>
+              <div onClick={e => e.stopPropagation()} style={{
+                background: t.bg, borderRadius: 16, width: '100%', maxWidth: 400,
+                maxHeight: '80vh', overflow: 'auto', padding: 24
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                  <h3 style={{ color: t.text, margin: 0, fontSize: 18, fontWeight: 700 }}>Compartir tiempo de espera</h3>
+                  <button onClick={() => setShowShareModal(false)} style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer', padding: 4
+                  }}>
+                    <X size={20} color={t.text} />
+                  </button>
+                </div>
+                <p style={{ color: t.textMuted, fontSize: 14, marginBottom: 20 }}>
+                  Selecciona la línea que deseas compartir:
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {lineasAMostrar.map(lineaId => {
+                    const linea = getLinea(lineaId);
+                    const tiempo = tiempos[`${selectedParada.id}-${lineaId}`];
+                    const fmt = formatTiempo(tiempo);
+                    return linea && (
+                      <button key={lineaId} onClick={() => shareWaitTime(lineaId)} style={{
+                        background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12,
+                        padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 11, background: linea.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <span style={{ color: '#fff', fontWeight: 800, fontSize: 14 }}>L{lineaId}</span>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                          <div style={{ color: t.text, fontWeight: 600, fontSize: 14 }}>{linea.nombre}</div>
+                          <div style={{ color: t.textMuted, fontSize: 12, marginTop: 2 }}>{linea.descripcion}</div>
+                        </div>
+                        <div style={{ background: `${fmt.color}20`, borderRadius: 10, padding: '8px 14px', minWidth: 70, textAlign: 'center' }}>
+                          <span style={{ color: fmt.color, fontWeight: 700, fontSize: 14 }}>{fmt.text}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
