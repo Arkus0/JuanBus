@@ -2,7 +2,7 @@
 const API_BASE = '/api/surbus';
 
 // Fetch tiempo de espera de una parada para una línea específica
-export const fetchTiempoEspera = async (paradaId, lineaId) => {
+export const fetchTiempoEspera = async (paradaId: number, lineaId: number): Promise<any> => {
   try {
     const res = await fetch(`${API_BASE}?l=${lineaId}&bs=${paradaId}`);
     if (!res.ok) {
@@ -13,13 +13,13 @@ export const fetchTiempoEspera = async (paradaId, lineaId) => {
       return { success: false, error: data.error };
     }
     return data;
-  } catch (e) {
+  } catch (e: any) {
     return { success: false, error: e.message };
   }
 };
 
 // Generar URL de Google Maps para rutas
-export const generateGoogleMapsUrl = (origenCoords, destinoCoords) => {
+export const generateGoogleMapsUrl = (origenCoords: any, destinoCoords: any): string | null => {
   if (!origenCoords || !destinoCoords) return null;
 
   // Para origen: determinar formato según tipo

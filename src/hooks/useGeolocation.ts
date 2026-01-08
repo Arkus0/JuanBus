@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 
 export const useGeolocation = () => {
-  const [userLocation, setUserLocation] = useState(null);
-  const [locationError, setLocationError] = useState(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [loadingLocation, setLoadingLocation] = useState(false);
 
-  const getUserLocation = useCallback(() => {
-    return new Promise((resolve, reject) => {
+  const getUserLocation = useCallback((): Promise<{ lat: number; lng: number }> => {
+    return new Promise<{ lat: number; lng: number }>((resolve, reject) => {
       if (!('geolocation' in navigator)) {
         const error = 'Geolocalización no disponible';
         setLocationError(error);
