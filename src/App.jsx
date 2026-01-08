@@ -771,7 +771,7 @@ export default function App() {
     return (
       <div onClick={handleClose} style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)',
-        zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
+        zIndex: 1001, display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
       }}>
         <div onClick={e => e.stopPropagation()} style={{
           background: t.bg, borderRadius: '24px 24px 0 0', width: '100%', maxWidth: 500, maxHeight: '90vh', overflow: 'auto'
