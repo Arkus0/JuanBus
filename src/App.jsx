@@ -478,16 +478,39 @@ const RoutePlannerView = ({ theme, origenCoords, setOrigenCoords, destinoCoords,
 // WIDGET CASA / TRABAJO (CommuteWidget)
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, userLocation, setCommuteFilterLineas, setSelectedParada }) => {
+const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, trabajoDireccion, userLocation, setCommuteFilterLineas, setSelectedParada }) => {
   const getParada = (id) => PARADAS.find(p => p.id === id);
 
-  // Maneja click en "Ir al Trabajo" - siempre muestra la parada de casa
+  // Maneja click en "Ir al Trabajo" - lógica inteligente
   const handleIrAlTrabajo = () => {
-    if (!casaParadaId) return;
-    const parada = getParada(casaParadaId);
-    if (parada) {
-      setSelectedParada(parada);
-      setCommuteFilterLineas(null);
+    const paradaCasa = casaParadaId ? getParada(casaParadaId) : null;
+
+    // Si hay parada de casa y ubicación del usuario
+    if (paradaCasa && userLocation) {
+      // Calcular distancia a la parada de casa
+      const distancia = haversineDistance(
+        userLocation.lat,
+        userLocation.lng,
+        paradaCasa.lat,
+        paradaCasa.lng
+      );
+
+      // Si está cerca de casa (< 300m), mostrar parada de casa
+      if (distancia < 0.3) {
+        setSelectedParada(paradaCasa);
+        setCommuteFilterLineas(null);
+        return;
+      }
+    }
+
+    // Si está lejos o no hay ubicación, ir a la dirección de trabajo
+    if (trabajoDireccion) {
+      const origin = userLocation
+        ? `${userLocation.lat},${userLocation.lng}`
+        : '';
+      const destination = encodeURIComponent(`${trabajoDireccion}, Almería`);
+      const url = `https://www.google.com/maps/dir/?api=1${origin ? `&origin=${origin}` : ''}&destination=${destination}&travelmode=transit`;
+      window.open(url, '_blank');
     }
   };
 
@@ -505,8 +528,8 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, us
         paradaTrabajo.lng
       );
 
-      // Si está cerca del trabajo (< 1km), mostrar parada de trabajo
-      if (distancia < 1) {
+      // Si está cerca del trabajo (< 300m), mostrar parada de trabajo
+      if (distancia < 0.3) {
         setSelectedParada(paradaTrabajo);
         setCommuteFilterLineas(null);
         return;
@@ -525,7 +548,7 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, us
   };
 
   // Si no hay nada configurado, no mostramos nada
-  if (!casaParadaId && !trabajoParadaId && !casaDireccion) return null;
+  if (!casaParadaId && !trabajoParadaId && !casaDireccion && !trabajoDireccion) return null;
 
   const ButtonCard = ({ icon: Icon, label, subtitle, onClick, isConfigured, color }) => (
     <div
@@ -570,12 +593,32 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, us
         paradaTrabajo.lat,
         paradaTrabajo.lng
       );
-      if (distancia < 1) {
+      if (distancia < 0.3) {
         return `Parada ${trabajoParadaId}`;
       }
     }
 
     return casaDireccion ? 'Ruta a casa' : 'No configurado';
+  };
+
+  // Determinar subtítulo para "Ir al Trabajo"
+  const getSubtituloIrAlTrabajo = () => {
+    if (!casaParadaId && !trabajoDireccion) return 'No configurado';
+
+    const paradaCasa = casaParadaId ? getParada(casaParadaId) : null;
+    if (paradaCasa && userLocation) {
+      const distancia = haversineDistance(
+        userLocation.lat,
+        userLocation.lng,
+        paradaCasa.lat,
+        paradaCasa.lng
+      );
+      if (distancia < 0.3) {
+        return `Parada ${casaParadaId}`;
+      }
+    }
+
+    return trabajoDireccion ? 'Ruta al trabajo' : 'No configurado';
   };
 
   return (
@@ -591,9 +634,9 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, us
       <ButtonCard
         icon={Briefcase}
         label="Ir al Trabajo"
-        subtitle={casaParadaId ? `Parada ${casaParadaId}` : 'No configurado'}
+        subtitle={getSubtituloIrAlTrabajo()}
         onClick={handleIrAlTrabajo}
-        isConfigured={!!casaParadaId}
+        isConfigured={!!(casaParadaId || trabajoDireccion)}
         color="#10b981"
       />
     </div>
@@ -647,6 +690,9 @@ export default function App() {
   );
   const [casaDireccion, setCasaDireccion] = useState(() =>
     localStorage.getItem('surbus_casa_direccion') || ''
+  );
+  const [trabajoDireccion, setTrabajoDireccion] = useState(() =>
+    localStorage.getItem('surbus_trabajo_direccion') || ''
   );
 
   // Tema
@@ -725,6 +771,15 @@ export default function App() {
       localStorage.removeItem('surbus_casa_direccion');
     }
   }, [casaDireccion]);
+
+  // Guardar dirección de trabajo en localStorage
+  useEffect(() => {
+    if (trabajoDireccion) {
+      localStorage.setItem('surbus_trabajo_direccion', trabajoDireccion);
+    } else {
+      localStorage.removeItem('surbus_trabajo_direccion');
+    }
+  }, [trabajoDireccion]);
 
   
 
@@ -1040,6 +1095,7 @@ export default function App() {
           casaParadaId={casaParadaId}
           trabajoParadaId={trabajoParadaId}
           casaDireccion={casaDireccion}
+          trabajoDireccion={trabajoDireccion}
           userLocation={userLocation}
           setCommuteFilterLineas={setCommuteFilterLineas}
           setSelectedParada={setSelectedParada}
@@ -1161,16 +1217,41 @@ export default function App() {
                   }}
                 />
                 <p style={{ color: t.textMuted, fontSize: 11, marginTop: 6, marginBottom: 0 }}>
-                  Esta dirección se usará cuando estés lejos del trabajo y quieras volver a casa
+                  Se usará cuando estés lejos del trabajo (más de 300m) y quieras volver a casa
+                </p>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', color: t.text, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                  Dirección de tu trabajo
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Universidad de Almería"
+                  value={trabajoDireccion}
+                  onChange={(e) => setTrabajoDireccion(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    borderRadius: 12,
+                    border: `1px solid ${t.border}`,
+                    background: t.bg,
+                    color: t.text,
+                    fontSize: 14,
+                    outline: 'none'
+                  }}
+                />
+                <p style={{ color: t.textMuted, fontSize: 11, marginTop: 6, marginBottom: 0 }}>
+                  Se usará cuando estés lejos de casa (más de 300m) y quieras ir al trabajo
                 </p>
               </div>
 
               <div style={{ background: `${t.accent}10`, borderRadius: 12, padding: 12 }}>
                 <p style={{ color: t.text, fontSize: 12, margin: 0, lineHeight: 1.5 }}>
                   <strong>💡 Cómo funciona:</strong><br/>
-                  • <strong>Parada Casa</strong> ({casaParadaId || 'no configurada'}): Parada cerca de tu casa para ir al trabajo<br/>
-                  • <strong>Parada Trabajo</strong> ({trabajoParadaId || 'no configurada'}): Parada cerca del trabajo para volver a casa<br/>
-                  • <strong>Dirección Casa</strong>: Para cuando estés lejos y necesites la ruta completa
+                  • <strong>Parada Casa</strong> ({casaParadaId || 'no configurada'}): Parada cerca de tu casa, se muestra si estás a menos de 300m<br/>
+                  • <strong>Parada Trabajo</strong> ({trabajoParadaId || 'no configurada'}): Parada cerca del trabajo, se muestra si estás a menos de 300m<br/>
+                  • <strong>Direcciones</strong>: Si estás lejos (más de 300m), se abre Google Maps con la ruta completa
                 </p>
               </div>
             </div>
