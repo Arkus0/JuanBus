@@ -504,8 +504,8 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
 
       console.log('📏 Distancia a casa:', distancia.toFixed(2), 'km');
 
-      // Si está cerca de casa (< 500m), mostrar parada de casa
-      if (distancia < 0.5) {
+      // Si está cerca de casa (< 1km), mostrar parada de casa
+      if (distancia < 1.0) {
         console.log('✅ Cerca de casa, mostrando parada');
         setSelectedParada(paradaCasa);
         setCommuteFilterLineas(null);
@@ -556,8 +556,8 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
 
       console.log('📏 Distancia al trabajo:', distancia.toFixed(2), 'km');
 
-      // Si está cerca del trabajo (< 500m), mostrar parada de trabajo
-      if (distancia < 0.5) {
+      // Si está cerca del trabajo (< 1km), mostrar parada de trabajo
+      if (distancia < 1.0) {
         console.log('✅ Cerca del trabajo, mostrando parada');
         setSelectedParada(paradaTrabajo);
         setCommuteFilterLineas(null);
@@ -641,7 +641,7 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
       );
       const distanciaMetros = Math.round(distancia * 1000);
 
-      if (distancia < 0.5) {
+      if (distancia < 1.0) {
         return `Parada ${trabajoParadaId} (${distanciaMetros}m)`;
       }
       // Mostrar distancia si está lejos
@@ -682,7 +682,7 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
       );
       const distanciaMetros = Math.round(distancia * 1000);
 
-      if (distancia < 0.5) {
+      if (distancia < 1.0) {
         return `Parada ${casaParadaId} (${distanciaMetros}m)`;
       }
       // Mostrar distancia si está lejos
@@ -891,7 +891,13 @@ export default function App() {
     }
   }, [trabajoDireccion]);
 
-  
+  // Guardar favoritos en localStorage
+  useEffect(() => {
+    console.log('💾 Guardando favoritos:', favoritos);
+    localStorage.setItem('surbus_fav', JSON.stringify(favoritos));
+  }, [favoritos]);
+
+
 
   const toggleFavorito = (id) => {
     setFavoritos(prev => {
@@ -1352,7 +1358,7 @@ export default function App() {
                       }}
                     />
                     <p style={{ color: t.textMuted, fontSize: 11, marginTop: 6, marginBottom: 0 }}>
-                      Se usará cuando estés lejos del trabajo (más de 500m) y quieras volver a casa
+                      Se usará cuando estés lejos del trabajo (más de 1km) y quieras volver a casa
                     </p>
                   </div>
 
@@ -1377,16 +1383,16 @@ export default function App() {
                       }}
                     />
                     <p style={{ color: t.textMuted, fontSize: 11, marginTop: 6, marginBottom: 0 }}>
-                      Se usará cuando estés lejos de casa (más de 500m) y quieras ir al trabajo
+                      Se usará cuando estés lejos de casa (más de 1km) y quieras ir al trabajo
                     </p>
                   </div>
 
                   <div style={{ background: `${t.accent}10`, borderRadius: 12, padding: 12 }}>
                     <p style={{ color: t.text, fontSize: 12, margin: 0, lineHeight: 1.5 }}>
                       <strong>💡 Cómo funciona:</strong><br/>
-                      • <strong>Parada Casa</strong> ({casaParadaId || 'no configurada'}): Se muestra si estás a menos de 500m de casa<br/>
-                      • <strong>Parada Trabajo</strong> ({trabajoParadaId || 'no configurada'}): Se muestra si estás a menos de 500m del trabajo<br/>
-                      • <strong>Direcciones</strong>: Si estás lejos (más de 500m), se abre Google Maps con la ruta. Si no hay dirección, se muestra la parada igualmente
+                      • <strong>Parada Casa</strong> ({casaParadaId || 'no configurada'}): Se muestra si estás a menos de 1km de casa<br/>
+                      • <strong>Parada Trabajo</strong> ({trabajoParadaId || 'no configurada'}): Se muestra si estás a menos de 1km del trabajo<br/>
+                      • <strong>Direcciones</strong>: Si estás lejos (más de 1km), se abre Google Maps con la ruta. Si no hay dirección, se muestra la parada igualmente
                     </p>
                   </div>
                 </>
