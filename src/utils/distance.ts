@@ -1,5 +1,5 @@
 // Cálculo de distancia haversine entre dos puntos geográficos
-export const haversineDistance = (lat1, lon1, lat2, lon2) => {
+export const haversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
   const R = 6371000; // Radio de la Tierra en metros
   const φ1 = lat1 * Math.PI / 180;
   const φ2 = lat2 * Math.PI / 180;

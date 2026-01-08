@@ -1,11 +1,11 @@
 // Formatear distancia en metros a formato legible
-export const formatDistance = (m) => {
+export const formatDistance = (m: number): string => {
   if (typeof m !== 'number' || !isFinite(m)) return '- m';
   return m < 1000 ? `${Math.round(m)} m` : `${(m/1000).toFixed(1)} km`;
 };
 
 // Formatear tiempo de espera con color según urgencia
-export const formatTiempo = (tiempo, theme) => {
+export const formatTiempo = (tiempo: any, theme: any): { text: string; color: string } => {
   if (!tiempo?.success) return { text: 'Sin datos', color: theme.textMuted };
   if (!tiempo.waitTimeString) {
     return {
@@ -21,7 +21,7 @@ export const formatTiempo = (tiempo, theme) => {
 };
 
 // Normalizar texto: eliminar acentos y convertir a minúsculas
-export const normalizeText = (str) => {
+export const normalizeText = (str: string): string => {
   if (typeof str !== 'string') return '';
   return str
     .toLowerCase()
@@ -30,7 +30,7 @@ export const normalizeText = (str) => {
 };
 
 // Parse JSON seguro con fallback y validación de tipo
-export const safeJsonParse = (value, fallback) => {
+export const safeJsonParse = <T>(value: string | null | undefined, fallback: T): T => {
   try {
     if (value === null || value === undefined) return fallback;
     const parsed = JSON.parse(value);

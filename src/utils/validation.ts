@@ -1,5 +1,5 @@
 // Validar coordenadas geográficas
-export const validateCoords = (lat, lng) => {
+export const validateCoords = (lat: number, lng: number): boolean => {
   if (typeof lat !== 'number' || !isFinite(lat) || lat < -90 || lat > 90) {
     throw new Error('Latitud inválida');
   }
@@ -10,13 +10,13 @@ export const validateCoords = (lat, lng) => {
 };
 
 // Sanitizar entrada de texto (limitar longitud y caracteres especiales)
-export const sanitizeInput = (input, maxLength = 100) => {
+export const sanitizeInput = (input: string, maxLength = 100): string => {
   if (typeof input !== 'string') return '';
   return input.slice(0, maxLength).trim();
 };
 
 // Validar parámetros de URL para Google Maps
-export const validateGoogleMapsParams = (origin, destination) => {
+export const validateGoogleMapsParams = (origin: any, destination: any): boolean => {
   if (!origin || !destination) {
     throw new Error('Origen y destino son requeridos');
   }

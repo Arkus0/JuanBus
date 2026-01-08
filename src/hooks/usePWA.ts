@@ -3,13 +3,13 @@ import { useState, useEffect } from 'react';
 export const usePWA = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [canInstall, setCanInstall] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
     const onOnline = () => setIsOnline(true);
     const onOffline = () => setIsOnline(false);
-    const onBeforeInstall = (e) => {
+    const onBeforeInstall = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
       setCanInstall(true);

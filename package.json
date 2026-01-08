@@ -12,9 +12,10 @@
     "dev": "concurrently \"node server.dev.js\" \"vite\"",
     "dev:vite": "vite",
     "dev:proxy": "node server.dev.js",
-    "build": "vite build",
+    "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "echo 'Linting not configured yet'"
+    "lint": "echo 'Linting not configured yet'",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
@@ -24,8 +25,13 @@
     "react-leaflet": "^4.2.1"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.21",
+    "@types/node": "^25.0.3",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^8.2.2",
+    "typescript": "^5.9.3",
     "vite": "^5.0.0",
     "vite-plugin-pwa": "^0.17.4"
   }

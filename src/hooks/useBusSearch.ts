@@ -2,7 +2,7 @@ import { useMemo, useDeferredValue } from 'react';
 import { normalizeText } from '../utils/formatters';
 import SINONIMOS_POI from '../data/sinonimos.json';
 
-export const useBusSearch = (searchTerm, paradas, userLocation, selectedLinea, activeTab) => {
+export const useBusSearch = (searchTerm: string, paradas: any[], userLocation: any, selectedLinea: number | null, activeTab: string) => {
   const deferredSearchTerm = useDeferredValue(searchTerm);
 
   const paradasFiltradas = useMemo(() => {
@@ -32,7 +32,7 @@ export const useBusSearch = (searchTerm, paradas, userLocation, selectedLinea, a
 
       const nombreNorm = normalizeText(parada.nombre);
       const idStr = parada.id.toString();
-      const lineasStr = parada.lineas.map(l => `l${l}`).join(' ');
+      const lineasStr = parada.lineas.map((l: number) => `l${l}`).join(' ');
 
       // Si ALGUNA palabra coincide, incluir
       const coincide = searchWords.some(word =>
