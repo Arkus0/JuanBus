@@ -1357,7 +1357,13 @@ export default function App() {
               { id: 'lineas', icon: Bus, label: 'Líneas' },
               { id: 'rutas', icon: MapIcon, label: 'Rutas' },
             ].map(tab => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
+              <button key={tab.id} onClick={() => {
+                setActiveTab(tab.id);
+                // Limpiar línea seleccionada cuando cambias a otra pestaña que no sea "lineas"
+                if (tab.id !== 'lineas') {
+                  setSelectedLinea(null);
+                }
+              }} style={{
                 display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 11, border: 'none',
                 background: activeTab === tab.id ? t.accent : t.bgCard, color: activeTab === tab.id ? '#fff' : t.textMuted,
                 fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap'
