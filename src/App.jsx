@@ -1125,7 +1125,15 @@ export default function App() {
             }}>
               <Heart size={18} fill={favoritos.some(f => f.id === selectedParada.id) ? '#fff' : 'transparent'} />
             </button>
-            <button onClick={() => setShowShareModal(true)} style={{
+            <button onClick={() => {
+              // Si hay línea seleccionada (desde vista Líneas), compartir directamente
+              if (selectedLinea) {
+                shareWaitTime(selectedLinea);
+              } else {
+                // Si no, mostrar modal de selección
+                setShowShareModal(true);
+              }
+            }} style={{
               background: t.bgCard, color: t.text,
               border: `1px solid ${t.border}`, borderRadius: 12, padding: 12, cursor: 'pointer'
             }}>
@@ -1170,8 +1178,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Modal de selección de línea para compartir */}
-          {showShareModal && (
+          {/* Modal de selección de línea para compartir (solo si no hay línea seleccionada) */}
+          {showShareModal && !selectedLinea && (
             <div onClick={() => setShowShareModal(false)} style={{
               position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
               zIndex: 1002, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24
