@@ -484,10 +484,13 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
   // Maneja click en "Ir al Trabajo" - lógica inteligente
   const handleIrAlTrabajo = async () => {
     const paradaCasa = casaParadaId ? getParada(casaParadaId) : null;
+    console.log('🏢 [Ir al Trabajo] Iniciando...');
 
     try {
       // Primero obtener la ubicación actual
+      console.log('📍 [Ir al Trabajo] Obteniendo ubicación GPS...');
       const location = await getUserLocation();
+      console.log('📍 [Ir al Trabajo] Ubicación obtenida:', location);
 
       // Si hay parada de casa y ubicación del usuario
       if (paradaCasa && location) {
@@ -498,13 +501,16 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
           paradaCasa.lat,
           paradaCasa.lng
         );
+        console.log(`📏 [Ir al Trabajo] Distancia a parada casa (${casaParadaId}):`, Math.round(distancia), 'metros');
 
         // Si está cerca de casa (< 400m), mostrar parada de casa y terminar
-        if (distancia < 0.4) {
+        if (distancia < 400) {
+          console.log('✅ [Ir al Trabajo] Estás cerca de casa → Mostrando parada');
           setSelectedParada(paradaCasa);
           setCommuteFilterLineas(null);
           return;
         }
+        console.log('🚗 [Ir al Trabajo] Estás lejos de casa → Abriendo Google Maps');
       }
 
       // Si está lejos y hay dirección de trabajo, abrir Google Maps
@@ -537,10 +543,13 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
   // Maneja click en "Ir a Casa" - lógica inteligente
   const handleIrACasa = async () => {
     const paradaTrabajo = trabajoParadaId ? getParada(trabajoParadaId) : null;
+    console.log('🏠 [Ir a Casa] Iniciando...');
 
     try {
       // Primero obtener la ubicación actual
+      console.log('📍 [Ir a Casa] Obteniendo ubicación GPS...');
       const location = await getUserLocation();
+      console.log('📍 [Ir a Casa] Ubicación obtenida:', location);
 
       // Si hay parada de trabajo y ubicación del usuario
       if (paradaTrabajo && location) {
@@ -551,13 +560,16 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
           paradaTrabajo.lat,
           paradaTrabajo.lng
         );
+        console.log(`📏 [Ir a Casa] Distancia a parada trabajo (${trabajoParadaId}):`, Math.round(distancia), 'metros');
 
         // Si está cerca del trabajo (< 400m), mostrar parada de trabajo y terminar
-        if (distancia < 0.4) {
+        if (distancia < 400) {
+          console.log('✅ [Ir a Casa] Estás cerca del trabajo → Mostrando parada');
           setSelectedParada(paradaTrabajo);
           setCommuteFilterLineas(null);
           return;
         }
+        console.log('🚗 [Ir a Casa] Estás lejos del trabajo → Abriendo Google Maps');
       }
 
       // Si está lejos y hay dirección de casa, abrir Google Maps
@@ -642,7 +654,7 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
         paradaTrabajo.lng
       );
 
-      if (distancia < 0.4) {
+      if (distancia < 400) {
         return `Parada ${trabajoParadaId}`;
       }
       // Mostrar si está lejos
@@ -682,7 +694,7 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
         paradaCasa.lng
       );
 
-      if (distancia < 0.4) {
+      if (distancia < 400) {
         return `Parada ${casaParadaId}`;
       }
       // Mostrar si está lejos
