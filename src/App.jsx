@@ -514,7 +514,6 @@ export default function App() {
   // Tema
     const { theme: t, darkMode, toggleTheme } = useTheme();
   const { userLocation, locationError, loadingLocation, getUserLocation } = useGeolocation();
-  const { isOnline, canInstall, isInstalled, install } = usePWA();
 
   
 
