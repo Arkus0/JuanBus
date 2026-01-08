@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useDeferredValue } from 'react';
 import {
   MapPin, Bus, Clock, Star, Search, Moon, Sun, Navigation, AlertTriangle,
   RefreshCw, ChevronRight, X, Heart, Map as MapIcon, Bell, BellOff, Share2,
@@ -31,51 +31,6 @@ import { fetchTiempoEspera, generateGoogleMapsUrl } from './utils/api';
 
 const getLinea = (id) => LINEAS.find(l => l.id === id);
 
-// Fix para iconos de Leaflet
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// COMPONENTES
-// ═══════════════════════════════════════════════════════════════════════════
-
-import { useState, useEffect, useCallback, useMemo, useDeferredValue } from 'react';
-import {
-  MapPin, Bus, Clock, Star, Search, Moon, Sun, Navigation, AlertTriangle,
-  RefreshCw, ChevronRight, X, Heart, Map as MapIcon, Bell, BellOff, Share2,
-  History, Settings, Locate, ChevronDown, Filter, Zap, Info,
-  ExternalLink, Wifi, WifiOff, Download, Check, CloudOff, List, Home, Briefcase
-} from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
-import L from 'leaflet';
-
-// ═══════════════════════════════════════════════════════════════════════════
-// DATOS DE SURBUS ALMERÍA
-// ═══════════════════════════════════════════════════════════════════════════
-
-// ═══════════════════════════════════════════════════════════════════════════
-// UTILIDADES
-// ═══════════════════════════════════════════════════════════════════════════
-
-const haversineDistance = (lat1, lon1, lat2, lon2) => {
-const formatDistance = (m) => m < 1000 ? `${Math.round(m)} m` : `${(m/1000).toFixed(1)} km`;
-const getLinea = (id) => LINEAS.find(l => l.id === id);
-
-// Normalizar texto: eliminar acentos y convertir a minúsculas
-const normalizeText = (str) => str
-// formatTiempo movido fuera del componente para evitar recreación
-const formatTiempo = (tiempo, theme) => {
-// API usando el proxy de Vercel (evita CORS)
-const API_BASE = '/api/surbus';
-// ═══════════════════════════════════════════════════════════════════════════
-// ALGORITMO DE PLANIFICACIÓN DE RUTAS
-// ═══════════════════════════════════════════════════════════════════════════
-
-const calcularRutas = (origenCoords, destinoCoords) => {
 // Fix para iconos de Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
