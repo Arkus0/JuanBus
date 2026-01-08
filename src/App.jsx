@@ -495,15 +495,15 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
         paradaCasa.lng
       );
 
-      // Si está cerca de casa (< 300m), mostrar parada de casa
-      if (distancia < 0.3) {
+      // Si está cerca de casa (< 500m), mostrar parada de casa
+      if (distancia < 0.5) {
         setSelectedParada(paradaCasa);
         setCommuteFilterLineas(null);
         return;
       }
     }
 
-    // Si está lejos o no hay ubicación, ir a la dirección de trabajo
+    // Si está lejos y hay dirección de trabajo, abrir Google Maps
     if (trabajoDireccion) {
       const origin = userLocation
         ? `${userLocation.lat},${userLocation.lng}`
@@ -511,6 +511,13 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
       const destination = encodeURIComponent(`${trabajoDireccion}, Almería`);
       const url = `https://www.google.com/maps/dir/?api=1${origin ? `&origin=${origin}` : ''}&destination=${destination}&travelmode=transit`;
       window.open(url, '_blank');
+      return;
+    }
+
+    // Fallback: si no hay dirección pero sí parada, mostrar la parada de todos modos
+    if (paradaCasa) {
+      setSelectedParada(paradaCasa);
+      setCommuteFilterLineas(null);
     }
   };
 
@@ -528,15 +535,15 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
         paradaTrabajo.lng
       );
 
-      // Si está cerca del trabajo (< 300m), mostrar parada de trabajo
-      if (distancia < 0.3) {
+      // Si está cerca del trabajo (< 500m), mostrar parada de trabajo
+      if (distancia < 0.5) {
         setSelectedParada(paradaTrabajo);
         setCommuteFilterLineas(null);
         return;
       }
     }
 
-    // Si está lejos o no hay ubicación, ir a la dirección de casa
+    // Si está lejos y hay dirección de casa, abrir Google Maps
     if (casaDireccion) {
       const origin = userLocation
         ? `${userLocation.lat},${userLocation.lng}`
@@ -544,6 +551,13 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
       const destination = encodeURIComponent(`${casaDireccion}, Almería`);
       const url = `https://www.google.com/maps/dir/?api=1${origin ? `&origin=${origin}` : ''}&destination=${destination}&travelmode=transit`;
       window.open(url, '_blank');
+      return;
+    }
+
+    // Fallback: si no hay dirección pero sí parada, mostrar la parada de todos modos
+    if (paradaTrabajo) {
+      setSelectedParada(paradaTrabajo);
+      setCommuteFilterLineas(null);
     }
   };
 
@@ -593,12 +607,18 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
         paradaTrabajo.lat,
         paradaTrabajo.lng
       );
-      if (distancia < 0.3) {
+      if (distancia < 0.5) {
         return `Parada ${trabajoParadaId}`;
       }
     }
 
-    return casaDireccion ? 'Ruta a casa' : 'No configurado';
+    // Si hay dirección, mostrar "Ruta a casa", sino mostrar la parada como fallback
+    if (casaDireccion) {
+      return 'Ruta a casa';
+    } else if (trabajoParadaId) {
+      return `Parada ${trabajoParadaId}`;
+    }
+    return 'No configurado';
   };
 
   // Determinar subtítulo para "Ir al Trabajo"
@@ -613,12 +633,18 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
         paradaCasa.lat,
         paradaCasa.lng
       );
-      if (distancia < 0.3) {
+      if (distancia < 0.5) {
         return `Parada ${casaParadaId}`;
       }
     }
 
-    return trabajoDireccion ? 'Ruta al trabajo' : 'No configurado';
+    // Si hay dirección, mostrar "Ruta al trabajo", sino mostrar la parada como fallback
+    if (trabajoDireccion) {
+      return 'Ruta al trabajo';
+    } else if (casaParadaId) {
+      return `Parada ${casaParadaId}`;
+    }
+    return 'No configurado';
   };
 
   return (
@@ -770,6 +796,24 @@ export default function App() {
       if (intervalId) clearInterval(intervalId);
     };
   }, [selectedParada, autoRefresh, isOnline, loadTiempos]);
+
+  // Guardar parada de casa en localStorage
+  useEffect(() => {
+    if (casaParadaId) {
+      localStorage.setItem('surbus_casa', JSON.stringify(casaParadaId));
+    } else {
+      localStorage.removeItem('surbus_casa');
+    }
+  }, [casaParadaId]);
+
+  // Guardar parada de trabajo en localStorage
+  useEffect(() => {
+    if (trabajoParadaId) {
+      localStorage.setItem('surbus_trabajo', JSON.stringify(trabajoParadaId));
+    } else {
+      localStorage.removeItem('surbus_trabajo');
+    }
+  }, [trabajoParadaId]);
 
   // Guardar dirección de casa en localStorage
   useEffect(() => {
@@ -1246,7 +1290,7 @@ export default function App() {
                       }}
                     />
                     <p style={{ color: t.textMuted, fontSize: 11, marginTop: 6, marginBottom: 0 }}>
-                      Se usará cuando estés lejos del trabajo (más de 300m) y quieras volver a casa
+                      Se usará cuando estés lejos del trabajo (más de 500m) y quieras volver a casa
                     </p>
                   </div>
 
@@ -1271,16 +1315,16 @@ export default function App() {
                       }}
                     />
                     <p style={{ color: t.textMuted, fontSize: 11, marginTop: 6, marginBottom: 0 }}>
-                      Se usará cuando estés lejos de casa (más de 300m) y quieras ir al trabajo
+                      Se usará cuando estés lejos de casa (más de 500m) y quieras ir al trabajo
                     </p>
                   </div>
 
                   <div style={{ background: `${t.accent}10`, borderRadius: 12, padding: 12 }}>
                     <p style={{ color: t.text, fontSize: 12, margin: 0, lineHeight: 1.5 }}>
                       <strong>💡 Cómo funciona:</strong><br/>
-                      • <strong>Parada Casa</strong> ({casaParadaId || 'no configurada'}): Parada cerca de tu casa, se muestra si estás a menos de 300m<br/>
-                      • <strong>Parada Trabajo</strong> ({trabajoParadaId || 'no configurada'}): Parada cerca del trabajo, se muestra si estás a menos de 300m<br/>
-                      • <strong>Direcciones</strong>: Si estás lejos (más de 300m), se abre Google Maps con la ruta completa
+                      • <strong>Parada Casa</strong> ({casaParadaId || 'no configurada'}): Se muestra si estás a menos de 500m de casa<br/>
+                      • <strong>Parada Trabajo</strong> ({trabajoParadaId || 'no configurada'}): Se muestra si estás a menos de 500m del trabajo<br/>
+                      • <strong>Direcciones</strong>: Si estás lejos (más de 500m), se abre Google Maps con la ruta. Si no hay dirección, se muestra la parada igualmente
                     </p>
                   </div>
                 </>
