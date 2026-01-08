@@ -639,16 +639,15 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
         paradaTrabajo.lat,
         paradaTrabajo.lng
       );
-      const distanciaMetros = Math.round(distancia * 1000);
 
       if (distancia < 0.4) {
-        return `Parada ${trabajoParadaId} (${distanciaMetros}m)`;
+        return `Parada ${trabajoParadaId}`;
       }
-      // Mostrar distancia si está lejos
+      // Mostrar si está lejos
       if (casaDireccion) {
-        return `Ruta a casa (${distanciaMetros}m del trabajo)`;
+        return `Ruta a casa`;
       }
-      return `Parada ${trabajoParadaId} (${distanciaMetros}m)`;
+      return `Parada ${trabajoParadaId}`;
     }
 
     // Si hay dirección, mostrar "Ruta a casa", sino mostrar la parada como fallback
@@ -680,16 +679,15 @@ const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, casaDireccion, tr
         paradaCasa.lat,
         paradaCasa.lng
       );
-      const distanciaMetros = Math.round(distancia * 1000);
 
       if (distancia < 0.4) {
-        return `Parada ${casaParadaId} (${distanciaMetros}m)`;
+        return `Parada ${casaParadaId}`;
       }
-      // Mostrar distancia si está lejos
+      // Mostrar si está lejos
       if (trabajoDireccion) {
-        return `Ruta al trabajo (${distanciaMetros}m de casa)`;
+        return `Ruta al trabajo`;
       }
-      return `Parada ${casaParadaId} (${distanciaMetros}m)`;
+      return `Parada ${casaParadaId}`;
     }
 
     // Si hay dirección, mostrar "Ruta al trabajo", sino mostrar la parada como fallback
@@ -770,12 +768,18 @@ export default function App() {
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
 
   // Paradas especiales: Casa y Trabajo
-  const [casaParadaId, setCasaParadaId] = useState(() =>
-    safeJsonParse(localStorage.getItem('surbus_casa'), null)
-  );
-  const [trabajoParadaId, setTrabajoParadaId] = useState(() =>
-    safeJsonParse(localStorage.getItem('surbus_trabajo'), null)
-  );
+  const [casaParadaId, setCasaParadaId] = useState(() => {
+    const raw = localStorage.getItem('surbus_casa');
+    const parsed = safeJsonParse(raw, null);
+    console.log('🏠 Cargando parada casa:', { raw, parsed });
+    return parsed;
+  });
+  const [trabajoParadaId, setTrabajoParadaId] = useState(() => {
+    const raw = localStorage.getItem('surbus_trabajo');
+    const parsed = safeJsonParse(raw, null);
+    console.log('🏢 Cargando parada trabajo:', { raw, parsed });
+    return parsed;
+  });
   const [casaDireccion, setCasaDireccion] = useState(() =>
     localStorage.getItem('surbus_casa_direccion') || ''
   );
