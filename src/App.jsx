@@ -467,7 +467,78 @@ const RoutePlannerView = ({ theme, origenCoords, setOrigenCoords, destinoCoords,
     </div>
   );
 };
+// ═══════════════════════════════════════════════════════════════════════════
+// WIDGET CASA / TRABAJO (CommuteWidget)
+// ═══════════════════════════════════════════════════════════════════════════
 
+const CommuteWidget = ({ theme, casaParadaId, trabajoParadaId, userLocation, setCommuteFilterLineas, setSelectedParada }) => {
+  const getParada = (id) => PARADAS.find(p => p.id === id);
+
+  const handleClick = (id) => {
+    if (!id) return;
+    const parada = getParada(id);
+    if (parada) {
+      setSelectedParada(parada);
+      // Aquí podrías filtrar líneas específicas si tuvieras esa lógica guardada
+      setCommuteFilterLineas(null);
+    }
+  };
+
+  // Si no hay nada configurado, no mostramos nada para no ocupar espacio
+  if (!casaParadaId && !trabajoParadaId) return null;
+
+  const ButtonCard = ({ icon: Icon, label, id, color }) => (
+    <div
+      onClick={() => handleClick(id)}
+      style={{
+        flex: 1,
+        background: theme.bgCard,
+        border: `1px solid ${theme.border}`,
+        borderRadius: 16,
+        padding: '16px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        cursor: id ? 'pointer' : 'default',
+        opacity: id ? 1 : 0.6,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+      }}
+    >
+      <div style={{ background: `${color}15`, padding: 10, borderRadius: '50%' }}>
+        <Icon size={24} color={color} />
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ color: theme.text, fontWeight: 700, fontSize: 14 }}>{label}</div>
+        <div style={{ color: theme.textMuted, fontSize: 11, marginTop: 2 }}>
+          {id ? `Parada ${id}` : 'No configurado'}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+      <ButtonCard
+        icon={Home}
+        label="Ir a Casa"
+        id={casaParadaId}
+        color={theme.accent}
+      />
+      <ButtonCard
+        icon={Briefcase}
+        label="Ir al Trabajo"
+        id={trabajoParadaId}
+        color={theme.accent} // O usa otro color si prefieres distinguir
+      />
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FIN WIDGET
+// ═══════════════════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════
