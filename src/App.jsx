@@ -586,32 +586,7 @@ export default function App() {
     const { theme: t, darkMode, toggleTheme } = useTheme();
   const { userLocation, locationError, loadingLocation, getUserLocation } = useGeolocation();
 
-  
 
-  // Geolocalización (ejecutar solo una vez al montar)
-  useEffect(() => {
-    if (!navigator.geolocation) {
-      setLocationError('Geolocalización no soportada');
-      return;
-    }
-    setLoadingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setLoadingLocation(false);
-      },
-      (error) => {
-        const messages = {
-          [error.PERMISSION_DENIED]: 'Permiso de geolocalización denegado',
-          [error.TIMEOUT]: 'Timeout al obtener ubicación',
-          [error.POSITION_UNAVAILABLE]: 'Ubicación no disponible'
-        };
-        setLocationError(messages[error.code] || 'Error al obtener ubicación');
-        setLoadingLocation(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  }, []); // Sin dependencias - solo ejecutar una vez
 
   // Paradas ordenadas
   const paradasCercanas = useMemo(() => {
