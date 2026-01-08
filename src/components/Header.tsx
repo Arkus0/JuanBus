@@ -1,5 +1,5 @@
-import { memo } from 'react';
-import { Bus, Check, WifiOff, Download, Sun, Moon, Search, X } from 'lucide-react';
+import { memo, useState, useRef, useEffect } from 'react';
+import { Bus, Check, WifiOff, Download, Sun, Moon, Search, X, Clock } from 'lucide-react';
 import type { Theme } from '../types';
 
 interface HeaderProps {
@@ -9,6 +9,7 @@ interface HeaderProps {
   isOnline: boolean;
   canInstall: boolean;
   searchTerm: string;
+  suggestions?: string[];
   onToggleTheme: () => void;
   onInstall: () => void;
   onSearchChange: (value: string) => void;
@@ -21,10 +22,39 @@ const Header = memo(({
   isOnline,
   canInstall,
   searchTerm,
+  suggestions = [],
   onToggleTheme,
   onInstall,
   onSearchChange
 }: HeaderProps) => {
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Cerrar sugerencias al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleInputFocus = () => {
+    if (suggestions.length > 0) {
+      setShowSuggestions(true);
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: string) => {
+    onSearchChange(suggestion);
+    setShowSuggestions(false);
+    inputRef.current?.blur();
+  };
+
   return (
     <header style={{
       position: 'sticky',
@@ -101,17 +131,24 @@ const Header = memo(({
           </div>
         </div>
 
-        <div style={{ position: 'relative' }}>
+        <div ref={searchRef} style={{ position: 'relative' }}>
           <Search
             size={18}
             color={theme.textMuted}
-            style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }}
+            style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', zIndex: 1, pointerEvents: 'none' }}
           />
           <input
+            ref={inputRef}
             type="text"
             placeholder="Buscar parada, número o línea..."
             value={searchTerm}
-            onChange={(e) => onSearchChange(e.target.value)}
+            onChange={(e) => {
+              onSearchChange(e.target.value);
+              if (e.target.value) {
+                setShowSuggestions(true);
+              }
+            }}
+            onFocus={handleInputFocus}
             aria-label="Buscar paradas de autobús"
             role="searchbox"
             style={{
@@ -127,7 +164,10 @@ const Header = memo(({
           />
           {searchTerm && (
             <button
-              onClick={() => onSearchChange('')}
+              onClick={() => {
+                onSearchChange('');
+                setShowSuggestions(false);
+              }}
               aria-label="Limpiar búsqueda"
               style={{
                 position: 'absolute',
@@ -136,11 +176,53 @@ const Header = memo(({
                 transform: 'translateY(-50%)',
                 background: 'transparent',
                 border: 'none',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                zIndex: 1
               }}
             >
               <X size={18} color={theme.textMuted} />
             </button>
+          )}
+
+          {/* Sugerencias */}
+          {showSuggestions && suggestions.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              top: 'calc(100% + 4px)',
+              left: 0,
+              right: 0,
+              background: theme.bgCard,
+              border: `1px solid ${theme.border}`,
+              borderRadius: 12,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+              maxHeight: 200,
+              overflowY: 'auto',
+              zIndex: 100
+            }}>
+              {suggestions.map((suggestion, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleSuggestionClick(suggestion)}
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom: i < suggestions.length - 1 ? `1px solid ${theme.border}` : 'none',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    color: theme.text,
+                    fontSize: 14
+                  }}
+                >
+                  <Clock size={14} color={theme.textMuted} />
+                  {suggestion}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       </div>
