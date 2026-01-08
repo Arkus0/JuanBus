@@ -695,6 +695,14 @@ export default function App() {
     localStorage.getItem('surbus_trabajo_direccion') || ''
   );
 
+  // Estado de expansión del panel de configuración Casa/Trabajo
+  // Expandido por defecto si los campos están vacíos
+  const [isConfigExpanded, setIsConfigExpanded] = useState(() => {
+    const casaDir = localStorage.getItem('surbus_casa_direccion') || '';
+    const trabajoDir = localStorage.getItem('surbus_trabajo_direccion') || '';
+    return !casaDir && !trabajoDir; // Expandido si ambos están vacíos
+  });
+
   // Tema
     const { theme: t, darkMode, toggleTheme } = useTheme();
   const { userLocation, locationError, loadingLocation, getUserLocation } = useGeolocation();
@@ -1191,69 +1199,92 @@ export default function App() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {/* Configuración de dirección de casa */}
             <div style={{ background: t.bgCard, borderRadius: 16, padding: 20, border: `1px solid ${t.border}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <Settings size={20} color={t.accent} />
-                <h3 style={{ margin: 0, color: t.text, fontSize: 16, fontWeight: 700 }}>Configuración Casa/Trabajo</h3>
-              </div>
-
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', color: t.text, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-                  Dirección de tu casa
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej: Calle Mayor 10, Almería"
-                  value={casaDireccion}
-                  onChange={(e) => setCasaDireccion(e.target.value)}
+              <div
+                onClick={() => setIsConfigExpanded(!isConfigExpanded)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: isConfigExpanded ? 12 : 0,
+                  cursor: 'pointer'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Settings size={20} color={t.accent} />
+                  <h3 style={{ margin: 0, color: t.text, fontSize: 16, fontWeight: 700 }}>Configuración Casa/Trabajo</h3>
+                </div>
+                <ChevronDown
+                  size={20}
+                  color={t.text}
                   style={{
-                    width: '100%',
-                    padding: '12px 14px',
-                    borderRadius: 12,
-                    border: `1px solid ${t.border}`,
-                    background: t.bg,
-                    color: t.text,
-                    fontSize: 14,
-                    outline: 'none'
+                    transform: isConfigExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.3s ease'
                   }}
                 />
-                <p style={{ color: t.textMuted, fontSize: 11, marginTop: 6, marginBottom: 0 }}>
-                  Se usará cuando estés lejos del trabajo (más de 300m) y quieras volver a casa
-                </p>
               </div>
 
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', color: t.text, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-                  Dirección de tu trabajo
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej: Universidad de Almería"
-                  value={trabajoDireccion}
-                  onChange={(e) => setTrabajoDireccion(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '12px 14px',
-                    borderRadius: 12,
-                    border: `1px solid ${t.border}`,
-                    background: t.bg,
-                    color: t.text,
-                    fontSize: 14,
-                    outline: 'none'
-                  }}
-                />
-                <p style={{ color: t.textMuted, fontSize: 11, marginTop: 6, marginBottom: 0 }}>
-                  Se usará cuando estés lejos de casa (más de 300m) y quieras ir al trabajo
-                </p>
-              </div>
+              {isConfigExpanded && (
+                <>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'block', color: t.text, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                      Dirección de tu casa
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Calle Mayor 10, Almería"
+                      value={casaDireccion}
+                      onChange={(e) => setCasaDireccion(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                        border: `1px solid ${t.border}`,
+                        background: t.bg,
+                        color: t.text,
+                        fontSize: 14,
+                        outline: 'none'
+                      }}
+                    />
+                    <p style={{ color: t.textMuted, fontSize: 11, marginTop: 6, marginBottom: 0 }}>
+                      Se usará cuando estés lejos del trabajo (más de 300m) y quieras volver a casa
+                    </p>
+                  </div>
 
-              <div style={{ background: `${t.accent}10`, borderRadius: 12, padding: 12 }}>
-                <p style={{ color: t.text, fontSize: 12, margin: 0, lineHeight: 1.5 }}>
-                  <strong>💡 Cómo funciona:</strong><br/>
-                  • <strong>Parada Casa</strong> ({casaParadaId || 'no configurada'}): Parada cerca de tu casa, se muestra si estás a menos de 300m<br/>
-                  • <strong>Parada Trabajo</strong> ({trabajoParadaId || 'no configurada'}): Parada cerca del trabajo, se muestra si estás a menos de 300m<br/>
-                  • <strong>Direcciones</strong>: Si estás lejos (más de 300m), se abre Google Maps con la ruta completa
-                </p>
-              </div>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'block', color: t.text, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                      Dirección de tu trabajo
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Universidad de Almería"
+                      value={trabajoDireccion}
+                      onChange={(e) => setTrabajoDireccion(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                        border: `1px solid ${t.border}`,
+                        background: t.bg,
+                        color: t.text,
+                        fontSize: 14,
+                        outline: 'none'
+                      }}
+                    />
+                    <p style={{ color: t.textMuted, fontSize: 11, marginTop: 6, marginBottom: 0 }}>
+                      Se usará cuando estés lejos de casa (más de 300m) y quieras ir al trabajo
+                    </p>
+                  </div>
+
+                  <div style={{ background: `${t.accent}10`, borderRadius: 12, padding: 12 }}>
+                    <p style={{ color: t.text, fontSize: 12, margin: 0, lineHeight: 1.5 }}>
+                      <strong>💡 Cómo funciona:</strong><br/>
+                      • <strong>Parada Casa</strong> ({casaParadaId || 'no configurada'}): Parada cerca de tu casa, se muestra si estás a menos de 300m<br/>
+                      • <strong>Parada Trabajo</strong> ({trabajoParadaId || 'no configurada'}): Parada cerca del trabajo, se muestra si estás a menos de 300m<br/>
+                      • <strong>Direcciones</strong>: Si estás lejos (más de 300m), se abre Google Maps con la ruta completa
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
 
             {favoritos.length === 0 ? (
