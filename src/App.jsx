@@ -217,6 +217,7 @@ const LocationSelector = ({ label, value, onChange, placeholder, theme, userLoca
             onClick={() => {
               onChange({ lat: userLocation.lat, lng: userLocation.lng, nombre: 'Mi ubicación', tipo: 'ubicacion' });
               setLugarTexto('');
+              setShowParadasDropdown(false);
             }}
             style={{
               flex: 1,
@@ -241,14 +242,22 @@ const LocationSelector = ({ label, value, onChange, placeholder, theme, userLoca
 
         {/* Botón Parada de autobús */}
         <button
-          onClick={() => setShowParadasDropdown(!showParadasDropdown)}
+          onClick={() => {
+            const nextState = !showParadasDropdown;
+            setShowParadasDropdown(nextState);
+            if (nextState) {
+              // Limpiar selección anterior al abrir el dropdown
+              onChange(null);
+              setLugarTexto('');
+            }
+          }}
           style={{
             flex: 1,
             padding: '10px 12px',
             borderRadius: 10,
             border: `1px solid ${theme.border}`,
-            background: value?.tipo === 'parada' ? theme.accent : theme.bgCard,
-            color: value?.tipo === 'parada' ? '#fff' : theme.text,
+            background: (value?.tipo === 'parada' || showParadasDropdown) ? theme.accent : theme.bgCard,
+            color: (value?.tipo === 'parada' || showParadasDropdown) ? '#fff' : theme.text,
             fontSize: 13,
             fontWeight: 600,
             cursor: 'pointer',
