@@ -1,5 +1,5 @@
 import { useState, useMemo, useDeferredValue, lazy, Suspense } from 'react';
-import { AlertTriangle, Locate, Heart, MapIcon, Wifi, WifiOff, ChevronDown, Settings } from 'lucide-react';
+import { AlertTriangle, Locate, Heart, MapIcon, Wifi, WifiOff, ChevronDown, Settings, SearchX } from 'lucide-react';
 import type { Parada, TabId, ViewMode, Ubicacion } from './types';
 
 // Data
@@ -131,6 +131,8 @@ export default function App() {
     }
   };
 
+  const showNoResultsInList = viewMode === 'list' && searchTerm.trim().length > 0 && paradasFiltradas.length === 0;
+
   return (
     <div style={{ minHeight: '100vh', background: t.bg, paddingBottom: 100 }}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
@@ -180,7 +182,7 @@ export default function App() {
         {/* Content */}
         {activeTab === 'cercanas' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {locationError ? (
+            {locationError && (
               <div style={{
                 background: `${t.warning}20`,
                 borderRadius: 12,
@@ -207,28 +209,76 @@ export default function App() {
                   Reintentar
                 </button>
               </div>
-            ) : loadingLocation ? (
+            )}
+
+            {loadingLocation && (
               <div style={{ textAlign: 'center', padding: 40, color: t.textMuted }}>
                 <Locate size={32} style={{ animation: 'spin 2s linear infinite' }} />
-                <p style={{ marginTop: 12 }}>Obteniendo ubicación...</p>
+                <p style={{ marginTop: 12, marginBottom: 0 }}>Obteniendo ubicación...</p>
+                <p style={{ marginTop: 8, fontSize: 13 }}>
+                  Puedes buscar paradas igualmente mientras cargamos tu posición.
+                </p>
               </div>
-            ) : viewMode === 'list' ? (
+            )}
+
+            {viewMode === 'list' ? (
               <>
                 <p style={{ color: t.textMuted, fontSize: 13, margin: '0 0 4px' }}>
-                  {paradasFiltradas.length} paradas
+                  {paradasFiltradas.length} {paradasFiltradas.length === 1 ? 'parada' : 'paradas'}
                 </p>
-                {paradasFiltradas.slice(0, 50).map(p => (
-                  <ParadaCard
-                    key={p.id}
-                    parada={p}
-                    theme={t}
-                    favoritos={favoritos}
-                    casaParadaId={casaParadaId}
-                    trabajoParadaId={trabajoParadaId}
-                    onParadaClick={setSelectedParada}
-                    onToggleFavorito={toggleFavorito}
-                  />
-                ))}
+                {showNoResultsInList ? (
+                  <div style={{
+                    background: t.bgCard,
+                    borderRadius: 16,
+                    padding: '30px 20px',
+                    textAlign: 'center',
+                    border: `1px solid ${t.border}`
+                  }}>
+                    <SearchX size={34} color={t.textMuted} />
+                    <p style={{ color: t.text, margin: '12px 0 4px', fontSize: 15, fontWeight: 600 }}>
+                      No hay resultados para “{searchTerm}”
+                    </p>
+                    <p style={{ color: t.textMuted, margin: 0, fontSize: 13 }}>
+                      Prueba con otro término o limpia la búsqueda.
+                    </p>
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      style={{
+                        marginTop: 16,
+                        background: t.accent,
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 10,
+                        padding: '10px 16px',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Limpiar búsqueda
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {paradasFiltradas.slice(0, 50).map(p => (
+                      <ParadaCard
+                        key={p.id}
+                        parada={p}
+                        theme={t}
+                        favoritos={favoritos}
+                        casaParadaId={casaParadaId}
+                        trabajoParadaId={trabajoParadaId}
+                        onParadaClick={setSelectedParada}
+                        onToggleFavorito={toggleFavorito}
+                      />
+                    ))}
+                    {paradasFiltradas.length > 50 && (
+                      <p style={{ color: t.textMuted, fontSize: 12, margin: '4px 0 0', textAlign: 'center' }}>
+                        Mostrando las 50 más relevantes para mantener la app rápida.
+                      </p>
+                    )}
+                  </>
+                )}
               </>
             ) : (
               <Suspense fallback={<LoadingFallback theme={t} />}>

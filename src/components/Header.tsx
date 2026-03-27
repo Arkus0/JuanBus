@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useEffect } from 'react';
+import { memo, useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { Bus, Check, WifiOff, Download, Sun, Moon, Search, X, Clock } from 'lucide-react';
 import type { Theme } from '../types';
 
@@ -28,6 +28,7 @@ const Header = memo(({
   onSearchChange
 }: HeaderProps) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -36,6 +37,7 @@ const Header = memo(({
     const handleClickOutside = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
         setShowSuggestions(false);
+        setActiveSuggestionIndex(-1);
       }
     };
 
@@ -44,7 +46,7 @@ const Header = memo(({
   }, []);
 
   const handleInputFocus = () => {
-    if (suggestions.length > 0) {
+    if (searchTerm.trim().length >= 2 && suggestions.length > 0) {
       setShowSuggestions(true);
     }
   };
@@ -52,7 +54,26 @@ const Header = memo(({
   const handleSuggestionClick = (suggestion: string) => {
     onSearchChange(suggestion);
     setShowSuggestions(false);
+    setActiveSuggestionIndex(-1);
     inputRef.current?.blur();
+  };
+
+  const handleInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (!showSuggestions || suggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveSuggestionIndex(prev => (prev + 1) % suggestions.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveSuggestionIndex(prev => (prev <= 0 ? suggestions.length - 1 : prev - 1));
+    } else if (e.key === 'Enter' && activeSuggestionIndex >= 0) {
+      e.preventDefault();
+      handleSuggestionClick(suggestions[activeSuggestionIndex]);
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+      setActiveSuggestionIndex(-1);
+    }
   };
 
   return (
@@ -144,13 +165,21 @@ const Header = memo(({
             value={searchTerm}
             onChange={(e) => {
               onSearchChange(e.target.value);
-              if (e.target.value) {
+              if (e.target.value.trim().length >= 2) {
                 setShowSuggestions(true);
+                setActiveSuggestionIndex(-1);
+              } else if (!e.target.value) {
+                setShowSuggestions(false);
+                setActiveSuggestionIndex(-1);
               }
             }}
             onFocus={handleInputFocus}
+            onKeyDown={handleInputKeyDown}
             aria-label="Buscar paradas de autobús"
             role="searchbox"
+            aria-expanded={showSuggestions}
+            aria-controls="search-suggestions-list"
+            aria-activedescendant={activeSuggestionIndex >= 0 ? `search-suggestion-${activeSuggestionIndex}` : undefined}
             style={{
               width: '100%',
               padding: '14px 44px',
@@ -162,11 +191,36 @@ const Header = memo(({
               outline: 'none'
             }}
           />
+          {!searchTerm && suggestions.length > 0 && (
+            <button
+              onClick={() => {
+                setShowSuggestions(prev => !prev);
+                setActiveSuggestionIndex(-1);
+              }}
+              style={{
+                marginTop: 8,
+                background: 'transparent',
+                border: 'none',
+                color: theme.accent,
+                fontSize: 12,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: 'pointer',
+                padding: 0
+              }}
+            >
+              <Clock size={12} />
+              {showSuggestions ? 'Ocultar historial' : 'Ver historial reciente'}
+            </button>
+          )}
           {searchTerm && (
             <button
               onClick={() => {
                 onSearchChange('');
                 setShowSuggestions(false);
+                setActiveSuggestionIndex(-1);
               }}
               aria-label="Limpiar búsqueda"
               style={{
@@ -198,15 +252,21 @@ const Header = memo(({
               maxHeight: 200,
               overflowY: 'auto',
               zIndex: 100
-            }}>
+            }}
+            role="listbox"
+            id="search-suggestions-list"
+            >
               {suggestions.map((suggestion, i) => (
                 <button
                   key={i}
+                  id={`search-suggestion-${i}`}
                   onClick={() => handleSuggestionClick(suggestion)}
+                  role="option"
+                  aria-selected={i === activeSuggestionIndex}
                   style={{
                     width: '100%',
                     padding: '12px 14px',
-                    background: 'transparent',
+                    background: i === activeSuggestionIndex ? `${theme.accent}14` : 'transparent',
                     border: 'none',
                     borderBottom: i < suggestions.length - 1 ? `1px solid ${theme.border}` : 'none',
                     textAlign: 'left',
