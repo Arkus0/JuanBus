@@ -39,15 +39,16 @@ const TabNavigation = memo(({
       paddingRight: 20,
       paddingTop: 8,
       paddingBottom: 8,
-      marginBottom: 8
+      marginBottom: 10
     }}>
       {/* Tabs */}
       <div style={{
         display: 'flex',
-        gap: 6,
+        gap: 8,
         marginBottom: 12,
         overflowX: 'auto',
-        paddingBottom: 4
+        paddingBottom: 4,
+        scrollSnapType: 'x mandatory'
       }}>
         {tabs.map(tab => (
           <button
@@ -57,22 +58,23 @@ const TabNavigation = memo(({
               display: 'flex',
               alignItems: 'center',
               gap: 6,
-              padding: '10px 14px',
-              borderRadius: 11,
-              border: 'none',
-              background: activeTab === tab.id ? theme.accent : theme.bgCard,
-              color: activeTab === tab.id ? '#fff' : theme.textMuted,
+              padding: '10px 13px',
+              borderRadius: 999,
+              border: `1px solid ${activeTab === tab.id ? theme.accent : theme.border}`,
+              background: activeTab === tab.id ? `${theme.accent}20` : theme.bgCard,
+              color: activeTab === tab.id ? theme.accent : theme.textMuted,
               fontWeight: 600,
               fontSize: 13,
               cursor: 'pointer',
-              whiteSpace: 'nowrap'
+              whiteSpace: 'nowrap',
+              scrollSnapAlign: 'start'
             }}
           >
             <tab.icon size={16} />
             {tab.label}
             {tab.id === 'favoritos' && favoritosCount > 0 && (
               <span style={{
-                background: activeTab === tab.id ? 'rgba(255,255,255,0.3)' : theme.danger,
+                background: activeTab === tab.id ? theme.accent : theme.danger,
                 color: '#fff',
                 padding: '2px 6px',
                 borderRadius: 6,
@@ -87,7 +89,12 @@ const TabNavigation = memo(({
 
       {/* Toggle Vista Lista/Mapa */}
       {activeTab !== 'rutas' && (
-        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+        <div style={{
+          display: 'grid',
+          gap: 6,
+          justifyContent: 'flex-end',
+          gridTemplateColumns: 'repeat(2, minmax(96px, max-content))'
+        }}>
           <button
             onClick={() => onViewModeChange('list')}
             style={{

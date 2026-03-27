@@ -90,7 +90,7 @@ const Header = memo(({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          marginBottom: 14
+          marginBottom: 12
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
@@ -116,8 +116,7 @@ const Header = memo(({
                 alignItems: 'center',
                 gap: 6
               }}>
-                Almería {isInstalled && <Check size={12} color={theme.success} />}
-                {!isOnline && <WifiOff size={12} color={theme.warning} />}
+                Almería • tiempo real
               </p>
             </div>
           </div>
@@ -150,6 +149,41 @@ const Header = memo(({
               {darkMode ? <Sun size={20} color={theme.text} /> : <Moon size={20} color={theme.text} />}
             </button>
           </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            background: theme.bgCard,
+            color: theme.textMuted,
+            border: `1px solid ${theme.border}`,
+            borderRadius: 999,
+            padding: '6px 10px',
+            fontSize: 11,
+            fontWeight: 600
+          }}>
+            {isOnline ? <Check size={12} color={theme.success} /> : <WifiOff size={12} color={theme.warning} />}
+            {isOnline ? 'Servicio online' : 'Sin conexión'}
+          </span>
+          {isInstalled && (
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: `${theme.success}14`,
+              color: theme.success,
+              border: `1px solid ${theme.success}44`,
+              borderRadius: 999,
+              padding: '6px 10px',
+              fontSize: 11,
+              fontWeight: 700
+            }}>
+              <Check size={12} />
+              App instalada
+            </span>
+          )}
         </div>
 
         <div ref={searchRef} style={{ position: 'relative' }}>

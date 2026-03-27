@@ -42,7 +42,8 @@ const ParadaCard = memo(({
         border: `1px solid ${theme.border}`,
         display: 'flex',
         alignItems: 'center',
-        gap: 14
+        gap: 14,
+        boxShadow: '0 8px 22px rgba(0,0,0,0.08)'
       }}
     >
       <div style={{
@@ -71,6 +72,10 @@ const ParadaCard = memo(({
         }}>
           {parada.nombre}
         </div>
+
+        <p style={{ color: theme.textMuted, fontSize: 12, marginTop: 4 }}>
+          {parada.lineas.length} {parada.lineas.length === 1 ? 'línea disponible' : 'líneas disponibles'}
+        </p>
 
         <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
           {parada.lineas.slice(0, 5).map(l => {
