@@ -20,6 +20,18 @@ body {
   overflow-x: hidden;
 }
 
+body::before {
+  content: '';
+  position: fixed;
+  inset: -20%;
+  background:
+    radial-gradient(circle at 10% 20%, rgba(0, 212, 170, 0.1), transparent 35%),
+    radial-gradient(circle at 90% 10%, rgba(118, 75, 162, 0.14), transparent 30%),
+    radial-gradient(circle at 50% 100%, rgba(102, 126, 234, 0.12), transparent 32%);
+  pointer-events: none;
+  z-index: -1;
+}
+
 #root {
   min-height: 100vh;
   min-height: 100dvh;
@@ -131,6 +143,12 @@ input, select {
 /* PWA Install prompt custom styling */
 .pwa-prompt {
   animation: slideUp 0.3s ease;
+}
+
+.glass-card {
+  background: rgba(18, 18, 26, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
 }
 
 /* Offline indicator */

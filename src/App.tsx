@@ -1,5 +1,5 @@
 import { useState, useMemo, useDeferredValue, lazy, Suspense } from 'react';
-import { AlertTriangle, Locate, Heart, MapIcon, Wifi, WifiOff, ChevronDown, Settings, SearchX } from 'lucide-react';
+import { AlertTriangle, Locate, Heart, MapIcon, Wifi, WifiOff, ChevronDown, Settings, SearchX, Sparkles, Filter } from 'lucide-react';
 import type { Parada, TabId, ViewMode, Ubicacion } from './types';
 
 // Data
@@ -55,6 +55,7 @@ export default function App() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [autoRefresh] = useState(true);
+  const [activeQuickFilter, setActiveQuickFilter] = useState<'all' | 'near' | 'multi' | 'fav'>('all');
 
   // Estados del planificador de rutas
   const [origenCoords, setOrigenCoords] = useState<Ubicacion | null>(null);
@@ -129,9 +130,25 @@ export default function App() {
     if (tabId !== 'lineas') {
       setSelectedLinea(null);
     }
+    if (tabId !== 'cercanas') {
+      setActiveQuickFilter('all');
+    }
   };
 
-  const showNoResultsInList = viewMode === 'list' && searchTerm.trim().length > 0 && paradasFiltradas.length === 0;
+  const paradasFiltradasConUI = useMemo(() => {
+    if (activeQuickFilter === 'near') {
+      return paradasFiltradas.filter(p => p.distancia !== undefined && p.distancia <= 1);
+    }
+    if (activeQuickFilter === 'multi') {
+      return paradasFiltradas.filter(p => p.lineas.length >= 3);
+    }
+    if (activeQuickFilter === 'fav') {
+      return paradasFiltradas.filter(p => favoritos.some(f => f.id === p.id));
+    }
+    return paradasFiltradas;
+  }, [activeQuickFilter, favoritos, paradasFiltradas]);
+
+  const showNoResultsInList = viewMode === 'list' && searchTerm.trim().length > 0 && paradasFiltradasConUI.length === 0;
 
   return (
     <div style={{ minHeight: '100vh', background: t.bg, paddingBottom: 100 }}>
@@ -182,6 +199,22 @@ export default function App() {
         {/* Content */}
         {activeTab === 'cercanas' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{
+              background: t.gradient,
+              borderRadius: 16,
+              padding: '16px 18px',
+              color: '#fff',
+              boxShadow: '0 10px 30px rgba(102, 126, 234, 0.25)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <Sparkles size={16} />
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 700 }}>Sugerencia rápida</p>
+              </div>
+              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, opacity: 0.95 }}>
+                Usa los filtros para ver primero las paradas más cercanas, con más líneas o tus favoritas.
+              </p>
+            </div>
+
             {locationError && (
               <div style={{
                 background: `${t.warning}20`,
@@ -223,8 +256,70 @@ export default function App() {
 
             {viewMode === 'list' ? (
               <>
+                <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6 }}>
+                  <button
+                    onClick={() => setActiveQuickFilter('all')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      borderRadius: 999,
+                      padding: '8px 12px',
+                      border: `1px solid ${activeQuickFilter === 'all' ? t.accent : t.border}`,
+                      background: activeQuickFilter === 'all' ? `${t.accent}18` : t.bgCard,
+                      color: activeQuickFilter === 'all' ? t.accent : t.textMuted,
+                      fontSize: 12,
+                      fontWeight: 700
+                    }}
+                  >
+                    <Filter size={14} />
+                    Todas
+                  </button>
+                  <button
+                    onClick={() => setActiveQuickFilter('near')}
+                    style={{
+                      borderRadius: 999,
+                      padding: '8px 12px',
+                      border: `1px solid ${activeQuickFilter === 'near' ? t.accent : t.border}`,
+                      background: activeQuickFilter === 'near' ? `${t.accent}18` : t.bgCard,
+                      color: activeQuickFilter === 'near' ? t.accent : t.textMuted,
+                      fontSize: 12,
+                      fontWeight: 700
+                    }}
+                  >
+                    Menos de 1 km
+                  </button>
+                  <button
+                    onClick={() => setActiveQuickFilter('multi')}
+                    style={{
+                      borderRadius: 999,
+                      padding: '8px 12px',
+                      border: `1px solid ${activeQuickFilter === 'multi' ? t.accent : t.border}`,
+                      background: activeQuickFilter === 'multi' ? `${t.accent}18` : t.bgCard,
+                      color: activeQuickFilter === 'multi' ? t.accent : t.textMuted,
+                      fontSize: 12,
+                      fontWeight: 700
+                    }}
+                  >
+                    +3 líneas
+                  </button>
+                  <button
+                    onClick={() => setActiveQuickFilter('fav')}
+                    style={{
+                      borderRadius: 999,
+                      padding: '8px 12px',
+                      border: `1px solid ${activeQuickFilter === 'fav' ? t.accent : t.border}`,
+                      background: activeQuickFilter === 'fav' ? `${t.accent}18` : t.bgCard,
+                      color: activeQuickFilter === 'fav' ? t.accent : t.textMuted,
+                      fontSize: 12,
+                      fontWeight: 700
+                    }}
+                  >
+                    Favoritas
+                  </button>
+                </div>
                 <p style={{ color: t.textMuted, fontSize: 13, margin: '0 0 4px' }}>
-                  {paradasFiltradas.length} {paradasFiltradas.length === 1 ? 'parada' : 'paradas'}
+                  {paradasFiltradasConUI.length} {paradasFiltradasConUI.length === 1 ? 'parada' : 'paradas'}
                 </p>
                 {showNoResultsInList ? (
                   <div style={{
@@ -260,7 +355,7 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    {paradasFiltradas.slice(0, 50).map(p => (
+                    {paradasFiltradasConUI.slice(0, 50).map(p => (
                       <ParadaCard
                         key={p.id}
                         parada={p}
@@ -272,7 +367,7 @@ export default function App() {
                         onToggleFavorito={toggleFavorito}
                       />
                     ))}
-                    {paradasFiltradas.length > 50 && (
+                    {paradasFiltradasConUI.length > 50 && (
                       <p style={{ color: t.textMuted, fontSize: 12, margin: '4px 0 0', textAlign: 'center' }}>
                         Mostrando las 50 más relevantes para mantener la app rápida.
                       </p>
