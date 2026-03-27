@@ -1,4 +1,4 @@
-import { useState, useMemo, useDeferredValue, lazy, Suspense } from 'react';
+import { useState, useMemo, useDeferredValue, lazy, Suspense, useEffect } from 'react';
 import { AlertTriangle, Locate, Heart, MapIcon, Wifi, WifiOff, ChevronDown, Settings, SearchX } from 'lucide-react';
 import type { Parada, TabId, ViewMode, Ubicacion } from './types';
 
@@ -55,6 +55,13 @@ export default function App() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [autoRefresh] = useState(true);
+  const [onlyUnder1km, setOnlyUnder1km] = useState(() => {
+    return localStorage.getItem('surbus_only_under_1km') === 'true';
+  });
+  const [showInfoChips, setShowInfoChips] = useState(() => {
+    const seenCount = Number(localStorage.getItem('surbus_info_chips_seen') || '0');
+    return Number.isFinite(seenCount) && seenCount < 2;
+  });
 
   // Estados del planificador de rutas
   const [origenCoords, setOrigenCoords] = useState<Ubicacion | null>(null);
@@ -87,14 +94,30 @@ export default function App() {
     isOnline
   );
 
+  useEffect(() => {
+    localStorage.setItem('surbus_only_under_1km', String(onlyUnder1km));
+  }, [onlyUnder1km]);
+
+  useEffect(() => {
+    if (!showInfoChips) return;
+
+    const seenCount = Number(localStorage.getItem('surbus_info_chips_seen') || '0');
+    const safeCount = Number.isFinite(seenCount) ? seenCount : 0;
+    localStorage.setItem('surbus_info_chips_seen', String(safeCount + 1));
+  }, [showInfoChips]);
+
   // Paradas ordenadas por distancia
   const paradasCercanas = useMemo(() => {
     if (!userLocation) return PARADAS;
-    return [...PARADAS].map(p => ({
-      ...p,
-      distancia: haversineDistance(userLocation.lat, userLocation.lng, p.lat, p.lng)
-    })).sort((a, b) => (a.distancia || 0) - (b.distancia || 0));
-  }, [userLocation]);
+
+    return [...PARADAS]
+      .map(p => ({
+        ...p,
+        distancia: haversineDistance(userLocation.lat, userLocation.lng, p.lat, p.lng)
+      }))
+      .filter(p => !onlyUnder1km || (p.distancia || 0) <= 1000)
+      .sort((a, b) => (a.distancia || 0) - (b.distancia || 0));
+  }, [userLocation, onlyUnder1km]);
 
   // Búsqueda con hook personalizado (ahora con fuzzy search y sugerencias)
   const { paradasFiltradas, suggestions } = useBusSearch(
@@ -132,6 +155,13 @@ export default function App() {
   };
 
   const showNoResultsInList = viewMode === 'list' && searchTerm.trim().length > 0 && paradasFiltradas.length === 0;
+  const showNoNearbyStops =
+    activeTab === 'cercanas' &&
+    userLocation &&
+    !loadingLocation &&
+    searchTerm.trim().length === 0 &&
+    onlyUnder1km &&
+    paradasFiltradas.length === 0;
 
   return (
     <div style={{ minHeight: '100vh', background: t.bg, paddingBottom: 100 }}>
@@ -223,6 +253,56 @@ export default function App() {
 
             {viewMode === 'list' ? (
               <>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: t.bgCard,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: 12,
+                  padding: '10px 12px',
+                  marginBottom: 4
+                }}>
+                  <div>
+                    <p style={{ color: t.text, margin: 0, fontSize: 13, fontWeight: 600 }}>
+                      Mostrar solo paradas a menos de 1 km
+                    </p>
+                    {showInfoChips && (
+                      <p style={{ color: t.textMuted, margin: '4px 0 0', fontSize: 11 }}>
+                        Puedes desactivar este filtro para volver al listado completo.
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setOnlyUnder1km(prev => !prev)}
+                    aria-label="Activar filtro menos de 1 km"
+                    aria-pressed={onlyUnder1km}
+                    style={{
+                      width: 46,
+                      height: 28,
+                      borderRadius: 999,
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: 2,
+                      background: onlyUnder1km ? t.accent : t.border,
+                      position: 'relative',
+                      transition: 'background 0.2s ease'
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: '50%',
+                        background: '#fff',
+                        display: 'block',
+                        transform: onlyUnder1km ? 'translateX(18px)' : 'translateX(0)',
+                        transition: 'transform 0.2s ease'
+                      }}
+                    />
+                  </button>
+                </div>
+
                 <p style={{ color: t.textMuted, fontSize: 13, margin: '0 0 4px' }}>
                   {paradasFiltradas.length} {paradasFiltradas.length === 1 ? 'parada' : 'paradas'}
                 </p>
@@ -257,6 +337,22 @@ export default function App() {
                     >
                       Limpiar búsqueda
                     </button>
+                  </div>
+                ) : showNoNearbyStops ? (
+                  <div style={{
+                    background: t.bgCard,
+                    borderRadius: 16,
+                    padding: '30px 20px',
+                    textAlign: 'center',
+                    border: `1px solid ${t.border}`
+                  }}>
+                    <Locate size={34} color={t.textMuted} />
+                    <p style={{ color: t.text, margin: '12px 0 4px', fontSize: 15, fontWeight: 600 }}>
+                      No hay paradas a menos de 1 km
+                    </p>
+                    <p style={{ color: t.textMuted, margin: 0, fontSize: 13 }}>
+                      Muévete un poco o usa la búsqueda para ver otras paradas.
+                    </p>
                   </div>
                 ) : (
                   <>
@@ -393,14 +489,34 @@ export default function App() {
                     </p>
                   </div>
 
-                  <div style={{ background: `${t.accent}10`, borderRadius: 12, padding: 12 }}>
-                    <p style={{ color: t.text, fontSize: 12, margin: 0, lineHeight: 1.5 }}>
-                      <strong>💡 Cómo funciona:</strong><br/>
-                      • <strong>Parada Casa</strong> ({casaParadaId || 'no configurada'}): Se muestra si estás a menos de 400m de casa<br/>
-                      • <strong>Parada Trabajo</strong> ({trabajoParadaId || 'no configurada'}): Se muestra si estás a menos de 400m del trabajo<br/>
-                      • <strong>Direcciones</strong>: Si estás lejos (más de 400m), se abre Google Maps con la ruta
-                    </p>
-                  </div>
+                  {showInfoChips && (
+                    <div style={{ background: `${t.accent}10`, borderRadius: 12, padding: 12 }}>
+                      <p style={{ color: t.text, fontSize: 12, margin: 0, lineHeight: 1.5 }}>
+                        <strong>💡 Cómo funciona:</strong><br/>
+                        • <strong>Parada Casa</strong> ({casaParadaId || 'no configurada'}): Se muestra si estás a menos de 400m de casa<br/>
+                        • <strong>Parada Trabajo</strong> ({trabajoParadaId || 'no configurada'}): Se muestra si estás a menos de 400m del trabajo<br/>
+                        • <strong>Direcciones</strong>: Si estás lejos (más de 400m), se abre Google Maps con la ruta
+                      </p>
+                      <button
+                        onClick={() => {
+                          localStorage.setItem('surbus_info_chips_seen', '2');
+                          setShowInfoChips(false);
+                        }}
+                        style={{
+                          marginTop: 8,
+                          background: 'transparent',
+                          color: t.accent,
+                          border: 'none',
+                          padding: 0,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Entendido, ocultar consejos
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </div>
