@@ -1,0 +1,30 @@
+name: Debug Surbus Fetch
+
+on:
+  push:
+    branches:
+      - claude/surbus-stops-update-zzgd25
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch paradas page
+        run: |
+          curl -sS -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" "https://www.surbusalmeria.es/tiempos-de-espera/paradas" -o paradas.html
+          echo "----HEAD----"
+          head -c 4000 paradas.html
+          echo ""
+          echo "----GREP linea links----"
+          grep -o '/tiempos-de-espera/linea/[0-9]*' paradas.html | sort -u | head -50 || true
+          echo "----GREP common patterns----"
+          grep -o 'ConfigureButton[^)]*)' paradas.html | head -20 || true
+          echo "----LENGTH----"
+          wc -c paradas.html
+      - name: Upload raw html
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paradas-debug-html
+          path: paradas.html
+          if-no-files-found: warn
