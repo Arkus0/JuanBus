@@ -11,24 +11,38 @@ jobs:
     steps:
       - name: Fetch paradas page
         run: |
-          curl -sS -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" "https://www.surbusalmeria.es/tiempos-de-espera/paradas" -o paradas.html
-          echo "----LENGTH----"
-          wc -c paradas.html
-          echo "----busStopLink occurrences----"
-          grep -c 'busStopLink' paradas.html || true
-          echo "----first busStopLink block----"
-          grep -o '<a class="busStopLink"[^>]*>.\{0,1200\}' paradas.html | head -3 || true
-          echo "----lines page link----"
-          grep -o 'href="[^"]*[Ll]inea[^"]*"' paradas.html | sort -u | head -30 || true
-          echo "----nav/menu hrefs----"
-          grep -o 'href="/[^"]*"' paradas.html | sort -u | head -60 || true
-          curl -sS -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" "https://www.surbusalmeria.es/tiempos-de-espera/lineas" -o lineas.html
-          echo "----lineas.html LENGTH----"
-          wc -c lineas.html
-          echo "----lineas.html head----"
-          head -c 1500 lineas.html
-          echo "----lineas.html hrefs----"
-          grep -o 'href="[^"]*"' lineas.html | sort -u | head -60 || true
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          curl -sS -A "$UA" "https://www.surbusalmeria.es/tiempos-de-espera/paradas" -o paradas.html
+          curl -sS -A "$UA" "https://www.surbusalmeria.es/tiempos-de-espera/linea/18" -o linea18.html
+          curl -sS -A "$UA" "https://www.surbusalmeria.es/tiempos-de-espera/parada/7" -o parada7.html
+
+          echo "=== busStopLink full anchor sample (paradas.html) ==="
+          grep -Pzo '(?s)<a class="busStopLink".*?</a>' paradas.html | head -c 3000 | tr -d '\0'
+          echo ""
+          echo "=== lat/lng/coord hints in paradas.html ==="
+          grep -Pzo '(?s)data-lat[^"]*"[^"]*"' paradas.html | head -c 500 | tr -d '\0' || true
+          grep -ion 'latitu\|longitu\|data-lat\|data-lng\|data-id' paradas.html | sort -u | head -20 || true
+
+          echo "=== linea18.html LENGTH ==="
+          wc -c linea18.html
+          echo "=== linea18.html busStopLink count ==="
+          grep -c 'busStopLink' linea18.html || true
+          echo "=== linea18.html ConfigureButton count ==="
+          grep -c 'ConfigureButton' linea18.html || true
+          echo "=== linea18.html stop-related anchors ==="
+          grep -Pzo '(?s)<a[^>]*busStop[^>]*>.*?</a>' linea18.html | head -c 2000 | tr -d '\0' || true
+          echo ""
+          echo "=== linea18.html parada hrefs ==="
+          grep -o 'href="/tiempos-de-espera/parada/[0-9]*"' linea18.html | sort -u | head -60 || true
+
+          echo "=== parada7.html LENGTH ==="
+          wc -c parada7.html
+          echo "=== parada7.html linea hrefs ==="
+          grep -o 'href="/tiempos-de-espera/linea/[0-9]*"' parada7.html | sort -u || true
+          echo "=== parada7.html lat/lng hints ==="
+          grep -ion 'latitu\|longitu\|data-lat\|data-lng' parada7.html | sort -u | head -20 || true
+          echo "=== parada7.html title/name area ==="
+          grep -Pzo '(?s)<h1.*?</h1>' parada7.html | head -c 500 | tr -d '\0' || true
       - name: Upload raw html
         if: always()
         uses: actions/upload-artifact@v4
