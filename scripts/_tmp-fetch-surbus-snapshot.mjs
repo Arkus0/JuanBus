@@ -8,44 +8,60 @@ const get = async (url) => {
   return res.text();
 };
 
-const lineIdRegex = /\/tiempos-de-espera\/linea\/(\d+)/g;
-const stopIdRegex = /ConfigureButton\s*\(\s*"[^"]+"\s*,\s*"[^"]+"\s*,\s*"[^"]+"\s*,\s*"[^"]+"\s*,\s*\d+\s*,\s*(\d+)\s*,\s*\d+\s*\)/g;
-const busStopLinkRegex = /<a href="\/tiempos-de-espera\/parada\/(\d+)" class="busStopLink">[\s\S]*?<span class="name">([^<]*)<\/span>/g;
-
 const main = async () => {
-  const lineasHtml = await get(`${BASE}/tiempos-de-espera/lineas`);
-  const lineIds = Array.from(new Set([...lineasHtml.matchAll(lineIdRegex)].map((m) => Number(m[1])))).sort((a, b) => a - b);
-
   const paradasHtml = await get(`${BASE}/tiempos-de-espera/paradas`);
-  const stopNames = new Map();
-  for (const m of paradasHtml.matchAll(busStopLinkRegex)) {
-    stopNames.set(Number(m[1]), m[2].trim());
+
+  const idx = paradasHtml.indexOf('reloadNear');
+  console.log('--- reloadNear context ---');
+  console.log(paradasHtml.slice(Math.max(0, idx - 1500), idx + 1500));
+
+  console.log('--- NearBusStops occurrences ---');
+  let pos = 0;
+  while (true) {
+    const i = paradasHtml.indexOf('NearBusStops', pos);
+    if (i === -1) break;
+    console.log(paradasHtml.slice(Math.max(0, i - 800), i + 200));
+    console.log('====');
+    pos = i + 1;
   }
 
-  const stopLines = new Map();
-  for (const lineId of lineIds) {
-    const html = await get(`${BASE}/tiempos-de-espera/linea/${lineId}`);
-    for (const m of html.matchAll(stopIdRegex)) {
-      const stopId = Number(m[1]);
-      if (!stopLines.has(stopId)) stopLines.set(stopId, new Set());
-      stopLines.get(stopId).add(lineId);
+  console.log('--- Trying NearBusStops endpoint variants ---');
+  const attempts = [
+    { method: 'GET', url: `${BASE}/es/WaitTime/NearBusStops?latitude=36.84&longitude=-2.46&accuracy=20000` },
+    { method: 'POST', url: `${BASE}/es/WaitTime/NearBusStops`, body: 'latitude=36.84&longitude=-2.46&accuracy=20000', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+    { method: 'POST', url: `${BASE}/es/WaitTime/NearBusStops`, body: JSON.stringify({ latitude: 36.84, longitude: -2.46, accuracy: 20000 }), headers: { 'Content-Type': 'application/json' } },
+  ];
+  for (const a of attempts) {
+    try {
+      const res = await fetch(a.url, {
+        method: a.method,
+        headers: { 'User-Agent': UA, 'X-Requested-With': 'XMLHttpRequest', ...(a.headers || {}) },
+        body: a.body,
+      });
+      const text = await res.text();
+      console.log(`ATTEMPT ${a.method} ${a.url} body=${a.body ?? ''} -> HTTP ${res.status}`);
+      console.log(text.slice(0, 2000));
+      console.log('====');
+    } catch (e) {
+      console.log(`ATTEMPT ${a.method} ${a.url} FAILED: ${e.message}`);
     }
   }
 
-  const allStopIds = new Set([...stopNames.keys(), ...stopLines.keys()]);
-  const stops = Array.from(allStopIds)
-    .sort((a, b) => a - b)
-    .map((id) => ({
-      id,
-      nombre: stopNames.get(id) ?? null,
-      lineas: stopLines.has(id) ? Array.from(stopLines.get(id)).sort((a, b) => a - b) : []
-    }));
-
-  console.log('LINEIDS:' + JSON.stringify(lineIds));
-  for (const s of stops) {
-    console.log('STOP:' + JSON.stringify(s));
+  console.log('--- New stop pages (159, 279, 439, 479) ---');
+  for (const id of [159, 279, 439, 479]) {
+    try {
+      const html = await get(`${BASE}/tiempos-de-espera/parada/${id}`);
+      console.log(`PARADA ${id} length=${html.length}`);
+      const titleMatch = html.match(/<title>([^<]*)<\/title>/);
+      console.log('title:', titleMatch ? titleMatch[1] : null);
+      const hasLat = /lat|lng|coord/i.test(html);
+      console.log('mentions lat/lng/coord:', hasLat);
+    } catch (e) {
+      console.log(`PARADA ${id} FETCH_ERROR ${e.message}`);
+    }
   }
-  console.error(`DONE lines=${lineIds.length} stops=${stops.length}`);
+
+  console.error('DONE');
 };
 
 main().catch((e) => {
