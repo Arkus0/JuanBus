@@ -12,19 +12,29 @@ jobs:
       - name: Fetch paradas page
         run: |
           curl -sS -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" "https://www.surbusalmeria.es/tiempos-de-espera/paradas" -o paradas.html
-          echo "----HEAD----"
-          head -c 4000 paradas.html
-          echo ""
-          echo "----GREP linea links----"
-          grep -o '/tiempos-de-espera/linea/[0-9]*' paradas.html | sort -u | head -50 || true
-          echo "----GREP common patterns----"
-          grep -o 'ConfigureButton[^)]*)' paradas.html | head -20 || true
           echo "----LENGTH----"
           wc -c paradas.html
+          echo "----busStopLink occurrences----"
+          grep -c 'busStopLink' paradas.html || true
+          echo "----first busStopLink block----"
+          grep -o '<a class="busStopLink"[^>]*>.\{0,1200\}' paradas.html | head -3 || true
+          echo "----lines page link----"
+          grep -o 'href="[^"]*[Ll]inea[^"]*"' paradas.html | sort -u | head -30 || true
+          echo "----nav/menu hrefs----"
+          grep -o 'href="/[^"]*"' paradas.html | sort -u | head -60 || true
+          curl -sS -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" "https://www.surbusalmeria.es/tiempos-de-espera/lineas" -o lineas.html
+          echo "----lineas.html LENGTH----"
+          wc -c lineas.html
+          echo "----lineas.html head----"
+          head -c 1500 lineas.html
+          echo "----lineas.html hrefs----"
+          grep -o 'href="[^"]*"' lineas.html | sort -u | head -60 || true
       - name: Upload raw html
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: paradas-debug-html
-          path: paradas.html
+          path: |
+            paradas.html
+            lineas.html
           if-no-files-found: warn
