@@ -105,7 +105,7 @@ npm run dev:proxy
 - ✅ Favoritos persistentes
 - ✅ Modo oscuro/claro
 - ✅ Actualización automática de tiempos
-- ✅ 344 paradas de autobuses de Almería
+- ✅ 348 paradas de autobuses de Almería
 - ✅ Planificador de rutas con mapa interactivo
 - ✅ Cálculo de rutas directas y con transbordos
 - ✅ Visualización en mapa (Leaflet + OpenStreetMap)

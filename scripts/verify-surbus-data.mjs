@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const SURBUS_BASE = 'https://www.surbusalmeria.es';
-const LINES_URL = `${SURBUS_BASE}/tiempos-de-espera/paradas`;
+const LINES_URL = `${SURBUS_BASE}/tiempos-de-espera/lineas`;
 
 const rootDir = process.cwd();
 const paradasPath = path.join(rootDir, 'src/data/paradas.json');
