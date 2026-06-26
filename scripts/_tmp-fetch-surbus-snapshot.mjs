@@ -8,57 +8,29 @@ const get = async (url) => {
   return res.text();
 };
 
+const dumpMatches = (html, label, regex) => {
+  console.log(`--- ${label} ---`);
+  let m;
+  let count = 0;
+  while ((m = regex.exec(html)) && count < 10) {
+    const start = Math.max(0, m.index - 150);
+    const end = Math.min(html.length, m.index + 150);
+    console.log(html.slice(start, end).replace(/\n/g, ' '));
+    console.log('---');
+    count++;
+  }
+  if (count === 0) console.log('(no matches)');
+};
+
 const main = async () => {
-  const paradasHtml = await get(`${BASE}/tiempos-de-espera/paradas`);
-
-  const idx = paradasHtml.indexOf('reloadNear');
-  console.log('--- reloadNear context ---');
-  console.log(paradasHtml.slice(Math.max(0, idx - 1500), idx + 1500));
-
-  console.log('--- NearBusStops occurrences ---');
-  let pos = 0;
-  while (true) {
-    const i = paradasHtml.indexOf('NearBusStops', pos);
-    if (i === -1) break;
-    console.log(paradasHtml.slice(Math.max(0, i - 800), i + 200));
-    console.log('====');
-    pos = i + 1;
-  }
-
-  console.log('--- Trying NearBusStops endpoint variants ---');
-  const attempts = [
-    { method: 'GET', url: `${BASE}/es/WaitTime/NearBusStops?latitude=36.84&longitude=-2.46&accuracy=20000` },
-    { method: 'POST', url: `${BASE}/es/WaitTime/NearBusStops`, body: 'latitude=36.84&longitude=-2.46&accuracy=20000', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
-    { method: 'POST', url: `${BASE}/es/WaitTime/NearBusStops`, body: JSON.stringify({ latitude: 36.84, longitude: -2.46, accuracy: 20000 }), headers: { 'Content-Type': 'application/json' } },
-  ];
-  for (const a of attempts) {
-    try {
-      const res = await fetch(a.url, {
-        method: a.method,
-        headers: { 'User-Agent': UA, 'X-Requested-With': 'XMLHttpRequest', ...(a.headers || {}) },
-        body: a.body,
-      });
-      const text = await res.text();
-      console.log(`ATTEMPT ${a.method} ${a.url} body=${a.body ?? ''} -> HTTP ${res.status}`);
-      console.log(text.slice(0, 2000));
-      console.log('====');
-    } catch (e) {
-      console.log(`ATTEMPT ${a.method} ${a.url} FAILED: ${e.message}`);
-    }
-  }
-
-  console.log('--- New stop pages (159, 279, 439, 479) ---');
-  for (const id of [159, 279, 439, 479]) {
-    try {
-      const html = await get(`${BASE}/tiempos-de-espera/parada/${id}`);
-      console.log(`PARADA ${id} length=${html.length}`);
-      const titleMatch = html.match(/<title>([^<]*)<\/title>/);
-      console.log('title:', titleMatch ? titleMatch[1] : null);
-      const hasLat = /lat|lng|coord/i.test(html);
-      console.log('mentions lat/lng/coord:', hasLat);
-    } catch (e) {
-      console.log(`PARADA ${id} FETCH_ERROR ${e.message}`);
-    }
+  for (const id of [159, 7]) {
+    const html = await get(`${BASE}/tiempos-de-espera/parada/${id}`);
+    console.log(`\n===== PARADA ${id} (length ${html.length}) =====`);
+    dumpMatches(html, 'coord', /coord/gi);
+    dumpMatches(html, 'lat (word boundary)', /\blat\b|latitude|latitud/gi);
+    dumpMatches(html, 'lng/lon', /\blng\b|longitude|longitud/gi);
+    dumpMatches(html, 'data-* attrs', /data-[a-z-]+="[^"]*"/gi);
+    dumpMatches(html, 'script src', /<script[^>]*src="[^"]*"[^>]*>/gi);
   }
 
   console.error('DONE');
