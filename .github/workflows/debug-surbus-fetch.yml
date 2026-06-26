@@ -16,9 +16,14 @@ jobs:
           curl -sS -A "$UA" "https://www.surbusalmeria.es/tiempos-de-espera/linea/18" -o linea18.html
           curl -sS -A "$UA" "https://www.surbusalmeria.es/tiempos-de-espera/parada/7" -o parada7.html
 
-          echo "=== busStopLink full anchor sample (paradas.html) ==="
-          grep -Pzo '(?s)<a class="busStopLink".*?</a>' paradas.html | head -c 3000 | tr -d '\0'
+          echo "=== busStopLink raw count (paradas.html) ==="
+          grep -c 'busStopLink' paradas.html || true
+          echo "=== busStopLink context sample (paradas.html) ==="
+          grep -n 'busStopLink' paradas.html | head -5 || true
+          grep -Pzo '(?s).{0,200}busStopLink.{0,400}' paradas.html | head -c 3000 | tr -d '\0' || true
           echo ""
+          echo "=== paradas.html lines 55-75 (lat/lng area) ==="
+          sed -n '55,75p' paradas.html
           echo "=== lat/lng/coord hints in paradas.html ==="
           grep -Pzo '(?s)data-lat[^"]*"[^"]*"' paradas.html | head -c 500 | tr -d '\0' || true
           grep -ion 'latitu\|longitu\|data-lat\|data-lng\|data-id' paradas.html | sort -u | head -20 || true
@@ -43,6 +48,13 @@ jobs:
           grep -ion 'latitu\|longitu\|data-lat\|data-lng' parada7.html | sort -u | head -20 || true
           echo "=== parada7.html title/name area ==="
           grep -Pzo '(?s)<h1.*?</h1>' parada7.html | head -c 500 | tr -d '\0' || true
+          echo ""
+          echo "=== parada7.html <title> tag ==="
+          grep -o '<title>[^<]*</title>' parada7.html || true
+          echo "=== parada7.html heading/title class hints ==="
+          grep -n '<h1\|<h2\|class="title\|stopName\|busStopName' parada7.html | head -20 || true
+          echo "=== linea18.html ConfigureButton sample ==="
+          grep -Pzo '(?s)ConfigureButton\([^)]*\)' linea18.html | head -c 1000 | tr -d '\0' || true
       - name: Upload raw html
         if: always()
         uses: actions/upload-artifact@v4
